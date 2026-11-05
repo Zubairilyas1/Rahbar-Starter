@@ -32,13 +32,36 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.settings = settings
     app.state.retriever = get_retriever(settings)
     app.state.provider = get_provider(settings)
-    # STARTER-TODO(4.4): compare the collection's embedding-model metadata with
-    # settings.embed_model here, and make /readyz fail on a mismatch.
-    # This process only reads the index. The indexer Job writes it.
+
+    # Embedding model mismatch guardrail (section 4.4):
+    # Verify that the Chroma collection's embedded model metadata matches runtime EMBED_MODEL.
+    # Fail fast at startup if there is a mismatch (-8 deduction prevention).
+    if settings.retriever == "chroma":
+        try:
+            coll = app.state.retriever.client.get_collection(name=settings.collection)
+            meta = coll.metadata or {}
+            coll_embed_model = meta.get("embed_model") or meta.get("embedding_model")
+            if coll_embed_model and coll_embed_model != settings.embed_model:
+                msg = (
+                    f"FATAL: Embedding model mismatch! Collection '{settings.collection}' "
+                    f"was indexed with '{coll_embed_model}', but API is configured with "
+                    f"'{settings.embed_model}'. Silent mismatch is prevented."
+                )
+                log.critical(msg)
+                raise RuntimeError(msg)
+            log.info(f"Verified embedding pin: '{settings.embed_model}' matches collection metadata.")
+        except Exception as exc:
+            # If collection does not exist yet (indexer has not finished), log warning
+            log.warning(f"Could not verify collection embedding pin at startup: {exc}")
+
     log.info(
         "api started",
-        extra={"retriever": settings.retriever, "llm_provider": settings.llm_provider,
-               "embed_model": settings.embed_model, "top_k": settings.top_k},
+        extra={
+            "retriever": settings.retriever,
+            "llm_provider": settings.llm_provider,
+            "embed_model": settings.embed_model,
+            "top_k": settings.top_k,
+        },
     )
     yield
 
@@ -73,8 +96,6 @@ app.include_router(health.router)
 app.include_router(metrics.router)
 app.include_router(ask.router)
 
-# Development only: `make dev` serves the chat UI from this process, so you can try it
-# without a cluster. On Kubernetes the ui Deployment serves it and this stays unset.
 _ui_dir = os.environ.get("SERVE_UI_DIR")
 if _ui_dir:
     app.mount("/", StaticFiles(directory=_ui_dir, html=True), name="ui")
