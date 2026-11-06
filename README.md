@@ -25,12 +25,12 @@ RAHBAR decouples heavy batch vector ingestion from stateless, low-latency API qu
 ```mermaid
 flowchart TD
     subgraph Client["Client Traffic"]
-        User["Student / Web Browser"] --> Ingress["Nginx Ingress Controller (Host: rahbar.local)"]
+        User["Student / Web Browser"] --> Ingress["Nginx Ingress Controller"]
     end
 
     subgraph Cluster["Kubernetes Namespace: rahbar"]
-        Ingress --> |/| UI["UI Service (nginx: 80)"]
-        Ingress --> |/api| APISvc["API Service (ClusterIP: 8000)"]
+        Ingress --> UI["UI Service (Nginx)"]
+        Ingress --> APISvc["API Service (ClusterIP: 8000)"]
 
         subgraph CoreAPI["API Deployment (3 Replicas + HPA)"]
             APISvc --> APIPod1["API Pod 1"]
@@ -38,27 +38,27 @@ flowchart TD
             APISvc --> APIPod3["API Pod 3"]
         end
 
-        subgraph StorageLayer["Data & Persistence Layer"]
-            Redis["Redis Stateful (PVC: 1Gi, ClusterIP: 6379)"]
-            Chroma["ChromaDB StatefulSet (PVC: 5Gi, ClusterIP: 8000)"]
+        subgraph StorageLayer["Data and Persistence Layer"]
+            Redis["Redis Stateful (PVC: 1Gi)"]
+            Chroma["ChromaDB StatefulSet (PVC: 5Gi)"]
         end
 
-        subgraph BatchIngestion["Ingestion Layer (Run-to-Completion)"]
-            Job["Indexer Job (k8s/base/indexer-job.yaml)"]
-            Cron["Weekly Reindex CronJob (0 3 * * 0)"]
+        subgraph BatchIngestion["Ingestion Layer (Run to Completion)"]
+            Job["Indexer Job"]
+            Cron["Weekly Reindex CronJob"]
         end
 
-        APIPod1 --> |Semantic Cache Lookup / Store| Redis
-        APIPod1 --> |Vector Query: 1 - cosine distance| Chroma
+        APIPod1 --> |Semantic Cache| Redis
+        APIPod1 --> |Vector Search| Chroma
 
-        Job --> |Sole Writer: Embed & Upsert| Chroma
-        Cron --> |Scheduled Refresh & Cache Flush| Chroma
-        Cron -.-> |Cache Invalidation| Redis
+        Job --> |Sole Writer| Chroma
+        Cron --> |Scheduled Refresh| Chroma
+        Cron -.-> |Cache Flush| Redis
     end
 
-    subgraph HostInference["Host / External LLM Inference"]
-        APIPod1 -.-> |Embed & Chat JSON Mode| Ollama["Ollama Host (nomic-embed-text / llama3.2:3b)"]
-        Job -.-> |Batch Embeddings (32/req)| Ollama
+    subgraph HostInference["Host LLM Inference"]
+        APIPod1 -.-> |JSON Chat Mode| Ollama["Ollama Host (Llama 3.2 / Nomic Embed)"]
+        Job -.-> |Batch Embeddings| Ollama
     end
 ```
 
