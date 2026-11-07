@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -31,7 +30,7 @@ class SimpleHTMLTextExtractor(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag_lower = tag.lower()
         if tag_lower in {"h1", "h2", "h3", "h4", "h5", "h6"}:
-            self.pieces.append(f"\n\n### ")
+            self.pieces.append("\n\n### ")
         elif tag_lower in {"p", "div", "br", "li"}:
             self.pieces.append("\n")
         elif tag_lower == "table":
@@ -116,9 +115,9 @@ def extract(path: str, doc_version: str, superseded: bool) -> Document:
             # Fallback to pdfplumber if pypdf encountered issues
             try:
                 with pdfplumber.open(str(file_path)) as pdf:
-                    for idx, p in enumerate(pdf.pages):
+                    for idx, plumber_page in enumerate(pdf.pages):
                         page_num = idx + 1
-                        text = (p.extract_text() or "").strip()
+                        text = (plumber_page.extract_text() or "").strip()
                         ocr_flag = len(text) < 50
                         pages.append(Page(source=source_name, page=page_num, text=text, ocr=ocr_flag))
             except Exception as inner_exc:

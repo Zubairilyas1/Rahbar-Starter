@@ -1,0 +1,28 @@
+# Single source of truth for every tunable (section 4.1). The api and indexer both
+# read EMBED_MODEL from here -- that is the embedding pin (section 4.4).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rahbar-config
+  namespace: rahbar
+data:
+  RETRIEVER: "chroma"
+  LLM_PROVIDER: "ollama-host"
+  EMBED_MODEL: "nomic-embed-text"
+  CHROMA_HOST: "chroma"
+  CHROMA_PORT: "8000"
+  CHROMA_COLLECTION: "rahbar"
+  TOP_K: "5"
+  RELEVANCE_FLOOR: "0.50"
+  TEMPERATURE: "0.2"
+  LLM_MODEL: "llama3.2:3b"
+  LLM_TIMEOUT: "30.0"
+  OLLAMA_URL: "http://host.minikube.internal:11434"
+  HOSTED_BASE_URL: ""
+  REDIS_URL: "redis://redis:6379"
+  CACHE_THRESHOLD: "0.85"
+  CACHE_TTL: "3600"
+  LOG_LEVEL: "INFO"
+  CORPUS_DIR: "/corpus"
+  CHUNK_SIZE: "400"
+  CHUNK_OVERLAP: "50"

@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: make install
+      - name: ruff + mypy (make lint)
+        run: make lint
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: make install
+      - name: "api tests with coverage (stub provider/retriever, no network, no model)"
+        run: |
+          cd api
+          RETRIEVER=stub LLM_PROVIDER=stub ../.venv/bin/pytest -q \
+            --cov=app --cov-report=term-missing --cov-fail-under=60
+      - run: cd indexer && ../.venv/bin/pytest -q
+
+  manifests:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar xz kubeconform
+          sudo mv kubeconform /usr/local/bin/
+      - run: kubectl kustomize k8s/overlays/prod | kubeconform -strict -summary
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t rahbar-api:ci api
+      - run: mkdir -p corpus/raw && docker build -f indexer/Dockerfile -t rahbar-indexer:ci .
+      - run: docker build -t rahbar-ui:ci ui
+      - name: save images for the scan job
+        run: |
+          mkdir -p /tmp/images
+          docker save rahbar-api:ci -o /tmp/images/api.tar
+          docker save rahbar-indexer:ci -o /tmp/images/indexer.tar
+          docker save rahbar-ui:ci -o /tmp/images/ui.tar
+      - uses: actions/upload-artifact@v4
+        with: {name: images, path: /tmp/images, retention-days: 1}
+
+  scan:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: {image: [api, indexer, ui]}
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: images, path: /tmp/images}
+      - run: docker load -i /tmp/images/${{ matrix.image }}.tar
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: rahbar-${{ matrix.image }}:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  # Honest limitation: GitHub-hosted runners have no Ollama. This job proves the
+  # cluster infrastructure (Job -> Chroma -> readiness -> Ingress) comes up and
+  # that the eval gate's own mechanism (HTTP calls, recall/citation math, exit
+  # code) runs end-to-end, using the stub retriever/provider against the fixture
+  # corpus -- not real recall numbers. Real recall@k is measured against the real
+  # corpus locally (make eval) and committed in eval/results.json.
+  e2e-eval:
+    needs: [manifests, scan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {name: images, path: /tmp/images}
+      - run: |
+          docker load -i /tmp/images/api.tar
+          docker load -i /tmp/images/indexer.tar
+          docker load -i /tmp/images/ui.tar
+      - uses: helm/kind-action@v1
+        with: {cluster_name: rahbar-ci}
+      - name: load images into kind
+        run: |
+          kind load docker-image rahbar-api:ci --name rahbar-ci
+          kind load docker-image rahbar-indexer:ci --name rahbar-ci
+          kind load docker-image rahbar-ui:ci --name rahbar-ci
+      - name: apply manifests, rewritten to the :ci image tags
+        run: |
+          # RETRIEVER/LLM_PROVIDER are rewritten to stub here, in the ConfigMap
+          # itself, BEFORE the first apply -- not via a later `kubectl set env`.
+          # The api's retrieval path always calls Ollama to embed the question
+          # (api/app/retrieval/chroma.py), which this runner does not have, so a
+          # first rollout against the real ConfigMap values would never pass
+          # readiness; patching env in afterwards just adds a second, equally
+          # stuck rollout on top instead of fixing the first one.
+          kubectl kustomize k8s/overlays/dev | \
+            sed -e 's#rahbar-api:dev#rahbar-api:ci#' \
+                -e 's#rahbar-indexer:dev#rahbar-indexer:ci#' \
+                -e 's#rahbar-ui:dev#rahbar-ui:ci#' \
+                -e 's#REPLACE_WITH_HOST_IP/32#0.0.0.0/32#' \
+                -e 's#RETRIEVER: chroma#RETRIEVER: stub#' \
+                -e 's#LLM_PROVIDER: ollama-host#LLM_PROVIDER: stub#' > /tmp/manifests.yaml
+          kubectl apply -f /tmp/manifests.yaml
+          # The real Secret is always created imperatively (never committed) --
+          # api-deployment.yaml requires it (LLM_API_KEY), so every pod sits in
+          # CreateContainerConfigError without it. Unread by the stub provider.
+          kubectl create secret generic rahbar-secret -n rahbar \
+            --from-literal=LLM_API_KEY=ci-placeholder \
+            --dry-run=client -o yaml | kubectl apply -f -
+          # NetworkPolicy's Ollama-host rule needs a real minikube host IP, which
+          # does not exist on kind -- irrelevant anyway once nothing here calls Ollama.
+          kubectl delete networkpolicy allow-egress-to-ollama-host -n rahbar --ignore-not-found
+          # The real indexer-job.yaml just auto-started against an empty /corpus
+          # (CI never runs corpus/fetch.py) and would fail -- stop it, then prove the
+          # Job -> Chroma -> readiness path with --dummy (deterministic, no Ollama
+          # needed for embeddings, unlike the real extract/chunk/embed/store stages).
+          kubectl delete job rahbar-indexer -n rahbar --ignore-not-found
+          # A Job's pod template is immutable once created, so the --dummy arg has to
+          # go in at creation time, not via a later kubectl patch (which fails with
+          # "field is immutable") -- inject it into the dry-run manifest first.
+          kubectl create job rahbar-indexer-ci --from=cronjob/reindex -n rahbar \
+            --dry-run=client -o json | \
+            jq '.spec.template.spec.containers[0].args = ["--dummy"]' | \
+            kubectl create -f -
+          kubectl wait --for=condition=complete job/rahbar-indexer-ci -n rahbar --timeout=180s
+          kubectl rollout status deployment/api -n rahbar --timeout=120s
+      - name: diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get pods -n rahbar -o wide
+          kubectl describe pods -n rahbar -l app=api
+          kubectl logs -n rahbar -l app=api --all-containers --tail=100 || true
+      - name: run the eval gate's own mechanism against the fixture golden set
+        # Known, disclosed limitation: with RETRIEVER=stub the api never abstains
+        # and never retrieves the fixtures' real passages, so this run's recall and
+        # abstention numbers are meaningless -- real numbers come from `make eval`
+        # against the real corpus and are committed in eval/results.json. What this
+        # step actually proves: run_eval.py executes against a live Service end to
+        # end (HTTP calls, recall/citation math, JSON output, exit code) with zero
+        # network calls to a third party. Exit code 2 ("not implemented") or an
+        # uncaught crash fail the job; a gate failure (exit 1) from the stub's known
+        # limitation does not.
+        run: |
+          kubectl port-forward svc/api 8000:8000 -n rahbar &
+          sleep 3
+          pip install httpx pyyaml
+          set +e
+          python eval/run_eval.py --api http://localhost:8000 \
+            --golden eval/fixtures/golden.fixture.yaml \
+            --out eval/results.ci.json
+          code=$?
+          set -e
+          echo "run_eval.py exit code: $code"
+          test "$code" -ne 2
