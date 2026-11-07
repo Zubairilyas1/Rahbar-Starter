@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -31,7 +30,7 @@ class SimpleHTMLTextExtractor(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag_lower = tag.lower()
         if tag_lower in {"h1", "h2", "h3", "h4", "h5", "h6"}:
-            self.pieces.append(f"\n\n### ")
+            self.pieces.append("\n\n### ")
         elif tag_lower in {"p", "div", "br", "li"}:
             self.pieces.append("\n")
         elif tag_lower == "table":

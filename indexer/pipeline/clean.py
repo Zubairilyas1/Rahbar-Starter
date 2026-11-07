@@ -17,7 +17,7 @@ def clean(doc: Document) -> Document:
     first_lines: list[str] = []
     last_lines: list[str] = []
     for p in doc.pages:
-        lines = [l.strip() for l in p.text.splitlines() if l.strip()]
+        lines = [line.strip() for line in p.text.splitlines() if line.strip()]
         if len(lines) >= 3:
             first_lines.append(lines[0])
             last_lines.append(lines[-1])
