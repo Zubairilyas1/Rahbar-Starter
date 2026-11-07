@@ -119,8 +119,8 @@ jobs:
                 -e 's#rahbar-indexer:dev#rahbar-indexer:ci#' \
                 -e 's#rahbar-ui:dev#rahbar-ui:ci#' \
                 -e 's#REPLACE_WITH_HOST_IP/32#0.0.0.0/32#' \
-                -e 's#RETRIEVER: "chroma"#RETRIEVER: "stub"#' \
-                -e 's#LLM_PROVIDER: "ollama-host"#LLM_PROVIDER: "stub"#' > /tmp/manifests.yaml
+                -e 's#RETRIEVER: chroma#RETRIEVER: stub#' \
+                -e 's#LLM_PROVIDER: ollama-host#LLM_PROVIDER: stub#' > /tmp/manifests.yaml
           kubectl apply -f /tmp/manifests.yaml
           # The real Secret is always created imperatively (never committed) --
           # api-deployment.yaml requires it (LLM_API_KEY), so every pod sits in
