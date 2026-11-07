@@ -1,7 +1,10 @@
 # Pinned: an unpinned dependency is the drift problem from Lecture 04.
-fastapi==0.115.12
-uvicorn==0.34.2
-pydantic==2.11.4
+fastapi==0.162.1
+# Pinned explicitly, not left transitive: fastapi 0.115.12's starlette range still
+# included CVE-2025-62727/CVE-2026-48818/CVE-2026-54283 (Trivy gate in ci.yml).
+starlette==1.6.0
+uvicorn==0.52.4
+pydantic==2.13.5
 httpx==0.28.1
 prometheus-client==0.21.1
 # Thin HTTP client for the Chroma server. Run the chromadb/chroma image with the SAME

@@ -3,6 +3,10 @@
 # root filesystem (section 4.7). ui/nginx.conf already assumes both of these.
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 
+# Patch OS packages with known fixed CVEs in the base image (Trivy gate in ci.yml).
+USER root
+RUN apk upgrade --no-cache
+
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY index.html /usr/share/nginx/html/index.html
 

@@ -16,6 +16,7 @@ FROM python:3.12-slim
 # the Python wheels): pytesseract shells out to `tesseract`; pdf2image shells out to
 # poppler's `pdftoppm`.
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends tesseract-ocr poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
