@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
+
 import httpx
 from pydantic import ValidationError
 
@@ -64,7 +66,7 @@ class OllamaProvider:
         prompt = self._build_prompt(question, passages)
         url = f"{self.settings.ollama_url.rstrip('/')}/api/chat"
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.settings.llm_model,
             "format": "json",  # Constrained decoding parameter
             "messages": [
