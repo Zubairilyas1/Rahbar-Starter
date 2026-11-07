@@ -107,11 +107,20 @@ jobs:
           kind load docker-image rahbar-ui:ci --name rahbar-ci
       - name: apply manifests, rewritten to the :ci image tags
         run: |
+          # RETRIEVER/LLM_PROVIDER are rewritten to stub here, in the ConfigMap
+          # itself, BEFORE the first apply -- not via a later `kubectl set env`.
+          # The api's retrieval path always calls Ollama to embed the question
+          # (api/app/retrieval/chroma.py), which this runner does not have, so a
+          # first rollout against the real ConfigMap values would never pass
+          # readiness; patching env in afterwards just adds a second, equally
+          # stuck rollout on top instead of fixing the first one.
           kubectl kustomize k8s/overlays/dev | \
             sed -e 's#rahbar-api:dev#rahbar-api:ci#' \
                 -e 's#rahbar-indexer:dev#rahbar-indexer:ci#' \
                 -e 's#rahbar-ui:dev#rahbar-ui:ci#' \
-                -e 's#REPLACE_WITH_HOST_IP/32#0.0.0.0/32#' > /tmp/manifests.yaml
+                -e 's#REPLACE_WITH_HOST_IP/32#0.0.0.0/32#' \
+                -e 's#RETRIEVER: "chroma"#RETRIEVER: "stub"#' \
+                -e 's#LLM_PROVIDER: "ollama-host"#LLM_PROVIDER: "stub"#' > /tmp/manifests.yaml
           kubectl apply -f /tmp/manifests.yaml
           # NetworkPolicy's Ollama-host rule needs a real minikube host IP, which
           # does not exist on kind -- irrelevant anyway once nothing here calls Ollama.
@@ -129,11 +138,13 @@ jobs:
             jq '.spec.template.spec.containers[0].args = ["--dummy"]' | \
             kubectl create -f -
           kubectl wait --for=condition=complete job/rahbar-indexer-ci -n rahbar --timeout=180s
-          # The api's own retrieval path always calls Ollama to embed the question
-          # (api/app/retrieval/chroma.py), which this runner does not have -- RETRIEVER
-          # and LLM_PROVIDER=stub are the only combination that needs no live model.
-          kubectl set env deployment/api RETRIEVER=stub LLM_PROVIDER=stub -n rahbar
           kubectl rollout status deployment/api -n rahbar --timeout=120s
+      - name: diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get pods -n rahbar -o wide
+          kubectl describe pods -n rahbar -l app=api
+          kubectl logs -n rahbar -l app=api --all-containers --tail=100 || true
       - name: run the eval gate's own mechanism against the fixture golden set
         # Known, disclosed limitation: with RETRIEVER=stub the api never abstains
         # and never retrieves the fixtures' real passages, so this run's recall and
