@@ -122,6 +122,12 @@ jobs:
                 -e 's#RETRIEVER: "chroma"#RETRIEVER: "stub"#' \
                 -e 's#LLM_PROVIDER: "ollama-host"#LLM_PROVIDER: "stub"#' > /tmp/manifests.yaml
           kubectl apply -f /tmp/manifests.yaml
+          # The real Secret is always created imperatively (never committed) --
+          # api-deployment.yaml requires it (LLM_API_KEY), so every pod sits in
+          # CreateContainerConfigError without it. Unread by the stub provider.
+          kubectl create secret generic rahbar-secret -n rahbar \
+            --from-literal=LLM_API_KEY=ci-placeholder \
+            --dry-run=client -o yaml | kubectl apply -f -
           # NetworkPolicy's Ollama-host rule needs a real minikube host IP, which
           # does not exist on kind -- irrelevant anyway once nothing here calls Ollama.
           kubectl delete networkpolicy allow-egress-to-ollama-host -n rahbar --ignore-not-found

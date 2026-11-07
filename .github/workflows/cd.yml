@@ -59,18 +59,27 @@ jobs:
         with: {cluster_name: rahbar-cd}
       - name: deploy the just-published images to an ephemeral cluster
         run: |
+          # RETRIEVER/LLM_PROVIDER rewritten to stub in the ConfigMap itself before
+          # the first apply (see ci.yml's e2e-eval for why patching env in after a
+          # first rollout against real values just gets a second, equally stuck
+          # rollout instead of fixing anything -- this runner has no Ollama either).
           kubectl kustomize k8s/overlays/dev | \
             sed -e "s#rahbar-api:dev#${{ secrets.DOCKERHUB_USERNAME }}/rahbar-api:${{ github.sha }}#" \
                 -e "s#rahbar-indexer:dev#${{ secrets.DOCKERHUB_USERNAME }}/rahbar-indexer:${{ github.sha }}#" \
                 -e "s#rahbar-ui:dev#${{ secrets.DOCKERHUB_USERNAME }}/rahbar-ui:${{ github.sha }}#" \
                 -e "s#REPLACE_WITH_HOST_IP/32#0.0.0.0/32#" \
+                -e 's#RETRIEVER: "chroma"#RETRIEVER: "stub"#' \
+                -e 's#LLM_PROVIDER: "ollama-host"#LLM_PROVIDER: "stub"#' \
             > /tmp/manifests.yaml
           kubectl apply -f /tmp/manifests.yaml
+          # The real Secret is always created imperatively (never committed).
+          kubectl create secret generic rahbar-secret -n rahbar \
+            --from-literal=LLM_API_KEY=cd-placeholder \
+            --dry-run=client -o yaml | kubectl apply -f -
           # Same disclosed limitation as ci.yml's e2e-eval: no Ollama on this
           # runner, so this is an infrastructure smoke test, not a RAG demo.
           kubectl delete networkpolicy allow-egress-to-ollama-host -n rahbar --ignore-not-found
           kubectl delete job rahbar-indexer -n rahbar --ignore-not-found
-          kubectl set env deployment/api RETRIEVER=stub LLM_PROVIDER=stub -n rahbar
           kubectl rollout status deployment/api -n rahbar --timeout=180s
           kubectl rollout status deployment/ui -n rahbar --timeout=120s
       - name: smoke test through the api Service
