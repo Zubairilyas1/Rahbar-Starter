@@ -1,0 +1,9 @@
+Dummy reindex via CronJob template with args=[--dummy]
+API Deployment generation before:
+9
+job.batch/rahbar-dummy-reindex condition met
+{"ts": "2026-11-07T17:08:15Z", "logger": "rahbar.indexer", "msg": "indexer starting", "dummy": true, "embed_model": "dummy-768", "collection": "rahbar", "chroma": "chroma:8000", "pod": "rahbar-dummy-reindex-sxnh8"}
+{"ts": "2026-11-07T17:08:36Z", "logger": "rahbar.indexer", "msg": "indexer finished", "chunks": 3, "seconds": 21.3}
+{"ts": "2026-11-07T17:08:39Z", "logger": "rahbar.indexer", "msg": "cache invalidation skipped", "error": "Timeout connecting to server"}
+API Deployment generation after:
+9

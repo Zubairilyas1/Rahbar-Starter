@@ -16,3 +16,5 @@ Captured from the live minikube cluster with `RETRIEVER=chroma` and `LLM_PROVIDE
       the log line naming the conflict, after changing `EMBED_MODEL` without reindexing.
 
 `get-pods.txt`, `indexer-job-logs.txt`, and `scale-and-pod-replacement.txt` record the live pod state, dummy Job completion, and a pod deletion. The HPA promptly returned a manual scale request to its target, so that file does not prove five ready endpoints.
+
+`reindex-without-redeploy.txt` shows the dummy reindex Job completing while the API Deployment generation remained 9. Its first run exposed a NetworkPolicy gap that blocked the indexer's Redis cache invalidation. The policy was corrected in `k8s/base/networkpolicy.yaml`; `reindex-cache-invalidation.txt` records the verification run after that fix.
