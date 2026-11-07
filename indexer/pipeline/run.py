@@ -15,6 +15,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from .config import IndexerSettings, get_settings
 from .models import Chunk
@@ -115,8 +116,8 @@ def _flush_cache(settings: IndexerSettings) -> None:
     try:
         import redis
 
-        client = redis.Redis.from_url(settings.redis_url, socket_timeout=2.0,
-                                       socket_connect_timeout=2.0)
+        client: Any = redis.Redis.from_url(settings.redis_url, socket_timeout=2.0,
+                                            socket_connect_timeout=2.0)
         keys = client.keys("rahbar:cache:*")
         if keys:
             client.delete(*keys)

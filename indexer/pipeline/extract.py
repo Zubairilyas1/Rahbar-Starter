@@ -115,9 +115,9 @@ def extract(path: str, doc_version: str, superseded: bool) -> Document:
             # Fallback to pdfplumber if pypdf encountered issues
             try:
                 with pdfplumber.open(str(file_path)) as pdf:
-                    for idx, p in enumerate(pdf.pages):
+                    for idx, plumber_page in enumerate(pdf.pages):
                         page_num = idx + 1
-                        text = (p.extract_text() or "").strip()
+                        text = (plumber_page.extract_text() or "").strip()
                         ocr_flag = len(text) < 50
                         pages.append(Page(source=source_name, page=page_num, text=text, ocr=ocr_flag))
             except Exception as inner_exc:
