@@ -121,9 +121,13 @@ jobs:
           # Job -> Chroma -> readiness path with --dummy (deterministic, no Ollama
           # needed for embeddings, unlike the real extract/chunk/embed/store stages).
           kubectl delete job rahbar-indexer -n rahbar --ignore-not-found
-          kubectl create job rahbar-indexer-ci --from=cronjob/reindex -n rahbar
-          kubectl patch job rahbar-indexer-ci -n rahbar --type=json \
-            -p '[{"op":"add","path":"/spec/template/spec/containers/0/args","value":["--dummy"]}]'
+          # A Job's pod template is immutable once created, so the --dummy arg has to
+          # go in at creation time, not via a later kubectl patch (which fails with
+          # "field is immutable") -- inject it into the dry-run manifest first.
+          kubectl create job rahbar-indexer-ci --from=cronjob/reindex -n rahbar \
+            --dry-run=client -o json | \
+            jq '.spec.template.spec.containers[0].args = ["--dummy"]' | \
+            kubectl create -f -
           kubectl wait --for=condition=complete job/rahbar-indexer-ci -n rahbar --timeout=180s
           # The api's own retrieval path always calls Ollama to embed the question
           # (api/app/retrieval/chroma.py), which this runner does not have -- RETRIEVER
