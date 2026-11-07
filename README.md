@@ -115,6 +115,11 @@ kubectl apply -f k8s/base/services.yaml
 kubectl apply -f k8s/base/ingress.yaml
 
 # 6. Enforce Zero-Trust Network Policies
+# One manual substitution first: the Ollama-egress rule ships a placeholder
+# CIDR (every teammate's minikube host IP is different). Get yours with:
+#   minikube ssh "grep host.minikube.internal /etc/hosts"
+# then replace REPLACE_WITH_HOST_IP/32 in k8s/base/networkpolicy.yaml with
+# that IP (e.g. 192.168.49.1/32) before applying.
 kubectl apply -f k8s/base/networkpolicy.yaml
 
 # 7. Wait for Chroma to be Ready
@@ -131,7 +136,7 @@ kubectl apply -f k8s/base/hpa.yaml
 kubectl apply -f k8s/base/reindex-cronjob.yaml
 
 # 10. Verify Deployment Rollout
-kubectl rollout status deployment/rahbar-api -n rahbar
+kubectl rollout status deployment/api -n rahbar
 ```
 
 ### Step 4: Ask a Question
@@ -139,7 +144,7 @@ Add the Minikube Ingress IP to your hosts file (or port-forward the API service)
 
 ```bash
 # Option A: Direct port-forward for testing
-kubectl port-forward svc/rahbar-api 8000:8000 -n rahbar
+kubectl port-forward svc/api 8000:8000 -n rahbar
 ```
 
 Submit a test query via `curl`:
