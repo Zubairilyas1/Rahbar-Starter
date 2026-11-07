@@ -1,0 +1,50 @@
+# Weekly, same image and arguments as the indexer Job (ADR 0003). `make index`
+# (and the README) create a one-off Job from this template with
+# `kubectl create job --from=cronjob/reindex ...` -- so this object must be named
+# `reindex`, not `rahbar-indexer`.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: reindex
+  namespace: rahbar
+spec:
+  schedule: "0 3 * * 0"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels: {app: rahbar-indexer}
+        spec:
+          serviceAccountName: rahbar-indexer
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+            - name: indexer
+              image: rahbar-indexer:dev
+              imagePullPolicy: IfNotPresent
+              envFrom: [{configMapRef: {name: rahbar-config}}]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 320Mi
+                limits:
+                  cpu: 500m
+                  memory: 768Mi
+          volumes:
+            - {name: tmp, emptyDir: {}}

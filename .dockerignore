@@ -1,0 +1,25 @@
+# Used when a Dockerfile is built with the REPOSITORY ROOT as its context, which
+# today is only indexer/Dockerfile (docker build -f indexer/Dockerfile -t ... .).
+# api/ and ui/ are still built with their own directory as context and consult
+# api/.dockerignore / nothing respectively; this file does not affect those builds.
+#
+# Deliberately NOT excluded: corpus/raw/ and eval/fixtures/ -- the indexer image
+# needs both (see indexer/Dockerfile).
+.git/
+.github/
+docs/
+k8s/
+rahbar-starter/
+*.pdf
+*.zip
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+.DS_Store
+api/tests/
+indexer/tests/

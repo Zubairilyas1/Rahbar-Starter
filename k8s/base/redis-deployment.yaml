@@ -1,0 +1,64 @@
+# Deployment + PVC, per the handout's own table (section 4.1) -- not a StatefulSet,
+# even though it is stateful. replicas: 1, so there is no multi-writer concern.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: rahbar
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: rahbar
+spec:
+  replicas: 1
+  strategy: {type: Recreate}   # one PVC, ReadWriteOnce: never run two redis pods at once
+  selector:
+    matchLabels: {app: redis}
+  template:
+    metadata:
+      labels: {app: redis}
+    spec:
+      serviceAccountName: rahbar-redis
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command: ["redis-server", "--appendonly", "yes"]
+          ports: [{containerPort: 6379}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: tmp, mountPath: /tmp}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            exec: {command: ["redis-cli", "ping"]}
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            exec: {command: ["redis-cli", "ping"]}
+            periodSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - {name: data, persistentVolumeClaim: {claimName: redis-data}}
+        - {name: tmp, emptyDir: {}}

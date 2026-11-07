@@ -1,0 +1,20 @@
+# / -> ui, /api -> api, on one host (rahbar.local, matching the Makefile's default
+# HOST and the README's curl examples). nginx does not proxy /api -- the browser
+# calls it directly through this Ingress.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rahbar
+  namespace: rahbar
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: rahbar.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: {service: {name: api, port: {number: 8000}}}
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: ui, port: {number: 8080}}}

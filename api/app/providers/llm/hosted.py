@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
+
 import httpx
 from pydantic import ValidationError
 
@@ -70,7 +72,7 @@ class HostedProvider:
             "Authorization": f"Bearer {self.settings.llm_api_key}",
         }
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.settings.llm_model,
             "response_format": {"type": "json_object"},  # Constrained decoding parameter
             "messages": [

@@ -1,0 +1,83 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: make install
+      - run: cd api && RETRIEVER=stub LLM_PROVIDER=stub ../.venv/bin/pytest -q
+      - run: cd indexer && ../.venv/bin/pytest -q
+
+  build-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # Commit-SHA tags only -- never :latest (section 6 of the handout).
+      - uses: docker/build-push-action@v6
+        with:
+          context: api
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rahbar-api:${{ github.sha }}
+      - run: mkdir -p corpus/raw
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: indexer/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rahbar-indexer:${{ github.sha }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ui
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/rahbar-ui:${{ github.sha }}
+
+  deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1
+        with: {cluster_name: rahbar-cd}
+      - name: deploy the just-published images to an ephemeral cluster
+        run: |
+          kubectl kustomize k8s/overlays/dev | \
+            sed -e "s#rahbar-api:dev#${{ secrets.DOCKERHUB_USERNAME }}/rahbar-api:${{ github.sha }}#" \
+                -e "s#rahbar-indexer:dev#${{ secrets.DOCKERHUB_USERNAME }}/rahbar-indexer:${{ github.sha }}#" \
+                -e "s#rahbar-ui:dev#${{ secrets.DOCKERHUB_USERNAME }}/rahbar-ui:${{ github.sha }}#" \
+                -e "s#REPLACE_WITH_HOST_IP/32#0.0.0.0/32#" \
+            > /tmp/manifests.yaml
+          kubectl apply -f /tmp/manifests.yaml
+          # Same disclosed limitation as ci.yml's e2e-eval: no Ollama on this
+          # runner, so this is an infrastructure smoke test, not a RAG demo.
+          kubectl delete networkpolicy allow-egress-to-ollama-host -n rahbar --ignore-not-found
+          kubectl delete job rahbar-indexer -n rahbar --ignore-not-found
+          kubectl set env deployment/api RETRIEVER=stub LLM_PROVIDER=stub -n rahbar
+          kubectl rollout status deployment/api -n rahbar --timeout=180s
+          kubectl rollout status deployment/ui -n rahbar --timeout=120s
+      - name: smoke test through the api Service
+        run: |
+          kubectl port-forward svc/api 8000:8000 -n rahbar &
+          sleep 3
+          curl -sf http://localhost:8000/healthz
+          curl -sf -X POST http://localhost:8000/api/ask \
+            -H "Content-Type: application/json" \
+            -d '{"question": "What does the stub say?"}'

@@ -6,12 +6,11 @@
 - Poisoned chunk / prompt injection test
 """
 
-import pytest
 from app.config import Settings
 from app.schemas import Answer, Citation, Passage
 from app.services.answer import answer_question
 from app.services.citations import verify_citations
-from app.services.cache import is_followup, SemanticCache
+from app.services.cache import is_followup
 from app.providers.llm.stub import StubProvider
 from app.retrieval.stub import StubRetriever
 

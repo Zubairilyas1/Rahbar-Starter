@@ -1,0 +1,46 @@
+# The only writer to Chroma (ADR 0001, docs/ARCHITECTURE.md). One-shot; the API
+# never indexes. Memory limit 768Mi matches the measurement already written up in
+# docs/ENGINEERING-NOTES.md Q4 (observed peak ~410Mi during OCR, ~46% headroom) --
+# keep these two numbers in sync if either changes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rahbar-indexer
+  namespace: rahbar
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels: {app: rahbar-indexer}
+    spec:
+      serviceAccountName: rahbar-indexer
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: indexer
+          image: rahbar-indexer:dev   # overlays pin this to a real tag/SHA
+          imagePullPolicy: IfNotPresent
+          envFrom: [{configMapRef: {name: rahbar-config}}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          resources:
+            requests:
+              cpu: 200m
+              memory: 320Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+      volumes:
+        - {name: tmp, emptyDir: {}}

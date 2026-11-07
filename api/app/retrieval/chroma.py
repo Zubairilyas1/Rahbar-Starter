@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
+
 import httpx
 
 from ..config import Settings
@@ -60,11 +62,13 @@ class ChromaRetriever:
         # Build where filter: filter out superseded documents unless historical question
         where_filter = None if is_historical else {"superseded": False}
 
-        # Query ChromaDB: request extra candidates to filter safely if needed
-        results = collection.query(
-            query_embeddings=[query_vector],
+        # Query ChromaDB: request extra candidates to filter safely if needed.
+        # chromadb-client's generated stubs are stricter than the plain
+        # list[float]/dict query this thin client actually accepts at runtime.
+        results: dict[str, Any] = collection.query(  # type: ignore[assignment]
+            query_embeddings=[query_vector],  # type: ignore[arg-type]
             n_results=min(limit * 2, 20),
-            where=where_filter,
+            where=where_filter,  # type: ignore[arg-type]
             include=["documents", "metadatas", "distances"],
         )
 
@@ -96,7 +100,7 @@ class ChromaRetriever:
                     text=text,
                     source=str(meta.get("source", "unknown")),
                     section=str(meta.get("section", "General")),
-                    page=int(meta["page"]) if meta.get("page") is not None else None,
+                    page=int(meta["page"]) if meta.get("page") is not None else None,  # type: ignore[arg-type]
                     score=score,
                 )
             )

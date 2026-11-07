@@ -38,7 +38,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Fail fast at startup if there is a mismatch (-8 deduction prevention).
     if settings.retriever == "chroma":
         try:
-            coll = app.state.retriever.client.get_collection(name=settings.collection)
+            # ChromaRetriever only (guaranteed by the settings.retriever == "chroma" check
+            # above); the Retriever Protocol itself declares no .client attribute.
+            chroma_client = app.state.retriever.client  # type: ignore[attr-defined]
+            coll = chroma_client.get_collection(name=settings.collection)
             meta = coll.metadata or {}
             coll_embed_model = meta.get("embed_model") or meta.get("embedding_model")
             if coll_embed_model and coll_embed_model != settings.embed_model:

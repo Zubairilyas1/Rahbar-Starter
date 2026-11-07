@@ -12,7 +12,7 @@ from ..config import Settings
 from ..logjson import request_id_var
 from ..providers.llm.base import LLMProvider
 from ..retrieval.base import Retriever
-from ..schemas import AskResponse, Citation, Passage, RetrievedRef
+from ..schemas import AskResponse, Passage, RetrievedRef
 from .cache import SemanticCache
 from .citations import verify_citations
 

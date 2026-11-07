@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: rahbar
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector:
+    matchLabels: {app: api}
+  template:
+    metadata:
+      labels: {app: api}
+    spec:
+      serviceAccountName: rahbar-api
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: rahbar-api:dev   # overlays pin this to a real tag/SHA
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8000}]
+          envFrom: [{configMapRef: {name: rahbar-config}}]
+          env:
+            - name: LLM_API_KEY
+              valueFrom: {secretKeyRef: {name: rahbar-secret, key: LLM_API_KEY}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          lifecycle:
+            preStop: {exec: {command: ["sh", "-c", "sleep 5"]}}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # section 4.3: exact probe timings from the handout.
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            failureThreshold: 30
+            periodSeconds: 2
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /readyz, port: 8000}
+            periodSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - {name: tmp, emptyDir: {}}
