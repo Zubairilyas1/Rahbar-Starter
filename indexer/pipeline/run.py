@@ -104,7 +104,25 @@ def main() -> int:
         log("indexer stage not implemented yet", error=str(exc))
         return 2
     log("indexer finished", chunks=count, seconds=round(time.perf_counter() - started, 1))
+    _flush_cache(settings)
     return 0
+
+
+def _flush_cache(settings: IndexerSettings) -> None:
+    """Invalidate the API's semantic cache so a reindex is never served stale
+    answers (ADR 0002/0003). Best-effort: a cache flush failure must not fail
+    the Job -- the index itself already wrote successfully."""
+    try:
+        import redis
+
+        client = redis.Redis.from_url(settings.redis_url, socket_timeout=2.0,
+                                       socket_connect_timeout=2.0)
+        keys = client.keys("rahbar:cache:*")
+        if keys:
+            client.delete(*keys)
+        log("cache invalidated", keys=len(keys))
+    except Exception as exc:
+        log("cache invalidation skipped", error=str(exc))
 
 
 if __name__ == "__main__":
