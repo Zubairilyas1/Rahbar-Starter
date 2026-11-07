@@ -1,0 +1,17 @@
+# CPU-based, per the handout's baseline requirement (section 4.1). Note (and see
+# docs/ENGINEERING-NOTES.md Q3): this is the wrong signal for an I/O-bound
+# generation service -- request-latency/queue-depth via prometheus-adapter would
+# be the real fix. Needs `minikube addons enable metrics-server` and the api
+# Deployment's resources.requests.cpu (already set) or this reads <unknown>/70%.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+  namespace: rahbar
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: api}
+  minReplicas: 3
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}

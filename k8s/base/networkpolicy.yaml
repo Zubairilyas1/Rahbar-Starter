@@ -1,0 +1,134 @@
+# Deny-by-default (section 4.7), then allow only the paths the architecture needs.
+# Requires minikube started with --cni=calico; the default CNI accepts these
+# manifests and silently ignores them (STARTER.md).
+#
+# MANUAL STEP before applying: policy #7 below (egress to Ollama on the host) needs
+# this machine's actual minikube host IP. Get it with:
+#   minikube ssh "grep host.minikube.internal /etc/hosts"
+# and replace REPLACE_WITH_HOST_IP/32 below -- it is different on every machine.
+
+# 1. Deny all ingress and egress by default for every pod in the namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: rahbar
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# 2. Every pod needs DNS, or default-deny-all breaks all Service name resolution.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: rahbar
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+# 3. Ingress controller -> ui only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-ui
+  namespace: rahbar
+spec:
+  podSelector: {matchLabels: {app: ui}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}]
+      ports: [{protocol: TCP, port: 8080}]
+---
+# 4. api from the ui and the Ingress (section 4.7's own wording).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-and-ui-to-api
+  namespace: rahbar
+spec:
+  podSelector: {matchLabels: {app: api}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+        - podSelector: {matchLabels: {app: ui}}
+      ports: [{protocol: TCP, port: 8000}]
+---
+# 5. chroma from api and indexer only. ui must NOT be able to reach chroma.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-and-indexer-to-chroma
+  namespace: rahbar
+spec:
+  podSelector: {matchLabels: {app: chroma}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: api}}
+        - podSelector: {matchLabels: {app: rahbar-indexer}}
+      ports: [{protocol: TCP, port: 8000}]
+---
+# 6. redis from api only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-redis
+  namespace: rahbar
+spec:
+  podSelector: {matchLabels: {app: redis}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: api}}}]
+      ports: [{protocol: TCP, port: 6379}]
+---
+# 7. api and indexer -> Ollama on the host (embeddings always go here, chat
+# generation too under LLM_PROVIDER=ollama-host). ipBlock is per-machine; see the
+# manual step above.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-ollama-host
+  namespace: rahbar
+spec:
+  podSelector:
+    matchExpressions:
+      - {key: app, operator: In, values: [api, rahbar-indexer]}
+  policyTypes: [Egress]
+  egress:
+    - to: [{ipBlock: {cidr: REPLACE_WITH_HOST_IP/32}}]
+      ports: [{protocol: TCP, port: 11434}]
+---
+# 8. api -> chroma and redis egress (the policies above only grant ingress on the
+# target side; NetworkPolicy ingress+egress are matched independently, so the
+# source pod also needs an explicit egress allow).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-egress-to-chroma-and-redis
+  namespace: rahbar
+spec:
+  podSelector: {matchLabels: {app: api}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: chroma}}}]
+      ports: [{protocol: TCP, port: 8000}]
+    - to: [{podSelector: {matchLabels: {app: redis}}}]
+      ports: [{protocol: TCP, port: 6379}]
+---
+# 9. indexer -> chroma egress (store writes the index).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-indexer-egress-to-chroma
+  namespace: rahbar
+spec:
+  podSelector: {matchLabels: {app: rahbar-indexer}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: chroma}}}]
+      ports: [{protocol: TCP, port: 8000}]
