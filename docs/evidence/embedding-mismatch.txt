@@ -1,0 +1,33 @@
+Embedding mismatch demonstration on dummy-768 collection
+configmap/rahbar-config patched
+deployment.apps/api restarted
+NAME                   READY   STATUS    RESTARTS        AGE
+api-6b54b7f584-rdtmr   0/1     Running   0               83s
+api-bd7f689dc-9x57f    1/1     Running   2 (22m ago)     26m
+api-bd7f689dc-9z86d    1/1     Running   2 (22m ago)     26m
+api-bd7f689dc-z9v7n    1/1     Running   1 (2m43s ago)   4m39s
+Newest pod: api-6b54b7f584-rdtmr
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+{"ts": "2026-11-07T16:56:22Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/auth/identity \"HTTP/1.1 200 OK\"", "request_id": "-"}
+{"ts": "2026-11-07T16:56:22Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant \"HTTP/1.1 200 OK\"", "request_id": "-"}
+{"ts": "2026-11-07T16:56:22Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database \"HTTP/1.1 200 OK\"", "request_id": "-"}
+{"ts": "2026-11-07T16:56:22Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/rahbar \"HTTP/1.1 200 OK\"", "request_id": "-"}
+{"ts": "2026-11-07T16:56:22Z", "level": "CRITICAL", "logger": "rahbar.api", "msg": "FATAL: Embedding model mismatch! Collection 'rahbar' was indexed with 'dummy-768', but API is configured with 'nomic-embed-text'. Silent mismatch is prevented.", "request_id": "-"}
+{"ts": "2026-11-07T16:56:22Z", "level": "WARNING", "logger": "rahbar.api", "msg": "Could not verify collection embedding pin at startup: FATAL: Embedding model mismatch! Collection 'rahbar' was indexed with 'dummy-768', but API is configured with 'nomic-embed-text'. Silent mismatch is prevented.", "request_id": "-"}
+{"ts": "2026-11-07T16:56:22Z", "level": "INFO", "logger": "rahbar.api", "msg": "api started", "request_id": "-", "retriever": "chroma", "llm_provider": "ollama-host", "embed_model": "nomic-embed-text", "top_k": 5}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+{"ts": "2026-11-07T16:56:23Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/rahbar \"HTTP/1.1 200 OK\"", "request_id": "cae91a4911d24ba8aa405f018a1b1536"}
+{"ts": "2026-11-07T16:56:23Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/4ba0af0d-19de-4da9-b39b-60da5f337086/count \"HTTP/1.1 200 OK\"", "request_id": "cae91a4911d24ba8aa405f018a1b1536"}
+{"ts": "2026-11-07T16:56:33Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/rahbar \"HTTP/1.1 200 OK\"", "request_id": "32140e64d7eb431ca11ac35bd16be3ef"}
+{"ts": "2026-11-07T16:56:33Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/4ba0af0d-19de-4da9-b39b-60da5f337086/count \"HTTP/1.1 200 OK\"", "request_id": "32140e64d7eb431ca11ac35bd16be3ef"}
+{"ts": "2026-11-07T16:56:43Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/rahbar \"HTTP/1.1 200 OK\"", "request_id": "07509f5dc49742078eccfa166df19497"}
+{"ts": "2026-11-07T16:56:43Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/4ba0af0d-19de-4da9-b39b-60da5f337086/count \"HTTP/1.1 200 OK\"", "request_id": "07509f5dc49742078eccfa166df19497"}
+{"ts": "2026-11-07T16:56:53Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/rahbar \"HTTP/1.1 200 OK\"", "request_id": "560268ec933547a8ad17d10ed23ca2c4"}
+{"ts": "2026-11-07T16:56:53Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/4ba0af0d-19de-4da9-b39b-60da5f337086/count \"HTTP/1.1 200 OK\"", "request_id": "560268ec933547a8ad17d10ed23ca2c4"}
+{"ts": "2026-11-07T16:57:03Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/rahbar \"HTTP/1.1 200 OK\"", "request_id": "d82fbc902e1146f4a3e3361df160e98d"}
+{"ts": "2026-11-07T16:57:03Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://chroma:8000/api/v2/tenants/default_tenant/databases/default_database/collections/4ba0af0d-19de-4da9-b39b-60da5f337086/count \"HTTP/1.1 200 OK\"", "request_id": "d82fbc902e1146f4a3e3361df160e98d"}
+Restoring EMBED_MODEL=dummy-768
+configmap/rahbar-config patched
+deployment.apps/api restarted

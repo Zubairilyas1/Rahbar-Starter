@@ -62,14 +62,11 @@ metrics:
 
 ## 4. The indexer's peak memory, its limit, the margin, and the exit code when it is wrong
 
-Under empirical cluster testing observed via `kubectl top pods -n rahbar`, the indexer Job exhibits distinct memory phases:
-- **Baseline text extraction**: ~180Mi.
-- **OCR Rendering Peak**: When rendering 300 DPI page bitmaps using `pdf2image` and running Tesseract OCR on `faculty-entrepreneurship-and-technical-start-ups-policy.pdf`, memory peaks at **~410Mi**.
-- **Batch Embedding**: Holding 32 chunks in memory during JSON encoding consumes ~290Mi.
+The live minikube run so far used the dummy indexer and finished before `kubectl top pods` was captured. Therefore its real-corpus OCR and embedding peak has **not yet been measured**; the earlier 410Mi estimate is not verified cluster evidence. See `docs/evidence/kubectl-top-pods.txt` for the observed running-pod metrics. A real-corpus run must be sampled while the indexer Job is active before claiming a measured safety margin.
 
 **Our Configuration:**  
 - **Container Memory Limit**: `768Mi` (configured in `k8s/base/indexer-job.yaml`).
-- **Safety Margin**: $768\text{Mi} - 410\text{Mi} = 358\text{Mi}$ (~46% headroom), ensuring large multi-page scans do not trigger memory thrashing.
+- **Safety Margin**: Unknown until a real-corpus indexer peak is measured. If the peak is 410Mi, the margin would be 358Mi; this is an estimate only.
 - **Exit Code on Misconfiguration**: If the memory limit is set below the peak (e.g. `256Mi`), the Linux kernel OOM Killer terminates the process with `SIGKILL` (signal 9). Kubernetes reports:
   ```text
   Exit Code: 137 (128 + 9 SIGKILL)
@@ -112,7 +109,7 @@ if coll_embed_model and coll_embed_model != settings.embed_model:
     log.critical(msg)
     raise RuntimeError(msg)
 ```
-The pod fails to boot immediately (`CrashLoopBackOff` with clear fatal log). In addition, [`api/app/routes/health.py`](../api/app/routes/health.py#L46-L52) checks this condition and returns HTTP 503 on `/readyz`.
+The startup check logs a critical mismatch, then its broad exception handler logs a warning and allows the process to start. [`api/app/routes/health.py`](../api/app/routes/health.py#L46-L52) independently detects the mismatch and returns HTTP 503 on `/readyz`, keeping the pod at `0/1 READY` and out of Service endpoints. The observed pod state and exact log line are in [`docs/evidence/embedding-mismatch.txt`](evidence/embedding-mismatch.txt).
 
 **What It Would Have Done Without the Guardrail (-8 Penalty):**  
 Without this guardrail, the API would have booted cleanly. When a user submitted a question, the API would embed the question using the *new* model's 1536-dimensional coordinate system, while Chroma's index contained vectors from the *old* model's 768-dimensional space (or different vector representations). The mathematical distance between vectors from two different model spaces is meaningless noise. The system would retrieve completely irrelevant chunks, fail the relevance floor, and silently abstain on valid questions without ever raising an error.

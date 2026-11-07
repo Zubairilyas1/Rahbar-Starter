@@ -1,0 +1,3 @@
+{"ts": "2026-11-07T16:30:09Z", "logger": "rahbar.indexer", "msg": "indexer starting", "dummy": true, "embed_model": "dummy-768", "collection": "rahbar", "chroma": "chroma:8000", "pod": "rahbar-indexer-rgb6l"}
+{"ts": "2026-11-07T16:31:21Z", "logger": "rahbar.indexer", "msg": "indexer finished", "chunks": 3, "seconds": 72.8}
+{"ts": "2026-11-07T16:31:26Z", "logger": "rahbar.indexer", "msg": "cache invalidation skipped", "error": "Timeout connecting to server"}
