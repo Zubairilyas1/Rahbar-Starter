@@ -63,6 +63,7 @@ jobs:
             sed -e "s#rahbar-api:dev#${{ secrets.DOCKERHUB_USERNAME }}/rahbar-api:${{ github.sha }}#" \
                 -e "s#rahbar-indexer:dev#${{ secrets.DOCKERHUB_USERNAME }}/rahbar-indexer:${{ github.sha }}#" \
                 -e "s#rahbar-ui:dev#${{ secrets.DOCKERHUB_USERNAME }}/rahbar-ui:${{ github.sha }}#" \
+                -e "s#REPLACE_WITH_HOST_IP/32#0.0.0.0/32#" \
             > /tmp/manifests.yaml
           kubectl apply -f /tmp/manifests.yaml
           # Same disclosed limitation as ci.yml's e2e-eval: no Ollama on this

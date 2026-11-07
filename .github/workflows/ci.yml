@@ -99,7 +99,7 @@ jobs:
           docker load -i /tmp/images/indexer.tar
           docker load -i /tmp/images/ui.tar
       - uses: helm/kind-action@v1
-        with: {cluster_name: rahbar-ci, load_image_archive: ""}
+        with: {cluster_name: rahbar-ci}
       - name: load images into kind
         run: |
           kind load docker-image rahbar-api:ci --name rahbar-ci
@@ -110,7 +110,8 @@ jobs:
           kubectl kustomize k8s/overlays/dev | \
             sed -e 's#rahbar-api:dev#rahbar-api:ci#' \
                 -e 's#rahbar-indexer:dev#rahbar-indexer:ci#' \
-                -e 's#rahbar-ui:dev#rahbar-ui:ci#' > /tmp/manifests.yaml
+                -e 's#rahbar-ui:dev#rahbar-ui:ci#' \
+                -e 's#REPLACE_WITH_HOST_IP/32#0.0.0.0/32#' > /tmp/manifests.yaml
           kubectl apply -f /tmp/manifests.yaml
           # NetworkPolicy's Ollama-host rule needs a real minikube host IP, which
           # does not exist on kind -- irrelevant anyway once nothing here calls Ollama.
