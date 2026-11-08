@@ -197,7 +197,7 @@ The FastAPI service exposes the following endpoints:
 > **Silent Embedding Mismatch Prevention**: At container boot, the API compares `Settings.embed_model` against Chroma collection metadata. If an operator changes the ConfigMap model without reindexing, the API immediately throws a `RuntimeError` and fails fast, preventing corrupt semantic distance calculations.
 
 > [!TIP]
-> **Relevance Floor & Honest Abstention**: When incoming questions lack relevant document passages (top cosine similarity $<0.50$), RAHBAR bypasses the LLM and abstains deterministically with an explicit `null` answer and `low` confidence.
+> **Relevance Floor & Honest Abstention**: When incoming questions lack relevant document passages (top cosine similarity $<0.35$), RAHBAR bypasses the LLM and abstains deterministically with an explicit `null` answer and `low` confidence.
 
 > [!WARNING]
 > **Citation Verification**: Every citation produced by the LLM is programmatically checked against retrieved chunks. Ungrounded or hallucinated section/page citations are automatically dropped.
