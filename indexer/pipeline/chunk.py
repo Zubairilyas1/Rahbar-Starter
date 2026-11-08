@@ -8,7 +8,7 @@ from .models import Chunk, Document
 
 
 SECTION_REGEX = re.compile(
-    r"^(?:#{1,6}\s+.+|(?:\d+\.)+\d*\s+[A-Z].+|[A-Z\s]{4,}:?)$",
+    r"^(?:#{1,6}\s+.+|(?:\d+\.)+\d*\s+[A-Z].+|[A-Z\s/]{4,}:?|[A-Z][a-z]+(?:\s+[A-Za-z/]+)*)$",
     re.MULTILINE
 )
 
@@ -43,11 +43,12 @@ def chunk(doc: Document, size: int, overlap: int) -> list[Chunk]:
             lines = para.splitlines()
             first_line = lines[0].strip()
 
-            # Check if this paragraph is purely a section header
-            if SECTION_REGEX.match(first_line) and len(lines) == 1 and len(first_line.split()) < 15:
+            # Check if this paragraph is or starts with a section header
+            if SECTION_REGEX.match(first_line) and len(first_line.split()) < 15:
                 current_section = first_line.lstrip("#").strip()
-                pending_heading = first_line
-                continue
+                if len(lines) == 1:
+                    pending_heading = first_line
+                    continue
 
             # If there was a pending heading, prepend it to the paragraph for semantic context
             if pending_heading:
@@ -86,7 +87,6 @@ def chunk(doc: Document, size: int, overlap: int) -> list[Chunk]:
                             chunk_id = hashlib.sha256(
                                 f"{doc.source}:{page.page}:{len(chunks)}:{chunk_text[:30]}".encode()
                             ).hexdigest()[:16]
-
                             chunks.append(
                                 Chunk(
                                     id=chunk_id,
@@ -98,35 +98,15 @@ def chunk(doc: Document, size: int, overlap: int) -> list[Chunk]:
                                     superseded=doc.superseded,
                                 )
                             )
-
-                            overlap_count = min(overlap, len(current_words))
-                            current_words = current_words[-overlap_count:] + s_words
-                        else:
-                            for i in range(0, len(s_words), max(1, size - overlap)):
-                                window_words = s_words[i : i + size]
-                                chunk_text = " ".join(window_words)
-                                chunk_id = hashlib.sha256(
-                                    f"{doc.source}:{page.page}:{len(chunks)}:{chunk_text[:30]}".encode()
-                                ).hexdigest()[:16]
-
-                                chunks.append(
-                                    Chunk(
-                                        id=chunk_id,
-                                        text=chunk_text,
-                                        source=doc.source,
-                                        section=current_section,
-                                        page=page.page,
-                                        doc_version=doc.doc_version,
-                                        superseded=doc.superseded,
-                                    )
-                                )
+                            # Keep overlap tokens from the end of current_words
+                            current_words = current_words[-overlap:] if overlap > 0 else []
+                        current_words.extend(s_words)
 
                 if current_words:
                     chunk_text = " ".join(current_words)
                     chunk_id = hashlib.sha256(
                         f"{doc.source}:{page.page}:{len(chunks)}:{chunk_text[:30]}".encode()
                     ).hexdigest()[:16]
-
                     chunks.append(
                         Chunk(
                             id=chunk_id,
