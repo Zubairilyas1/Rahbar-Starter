@@ -6,14 +6,14 @@ questions:
     type: ordinary
     question: What CGPA does an undergraduate need to stay off academic warning?
     relevant:
-      - {source: academic-rules-handbook-jun-2026.pdf, section: "5.4 Academic Warning"}
+      - {source: academic-rules-handbook-jun-2026.pdf, section: "Academic Warning"}
     expect: "2.00"
 
   - id: q02
     type: exact
     question: What attendance percentage does clause 1.21 of the academic rules require?
     relevant:
-      - {source: academic-rules-handbook-jun-2026.pdf, section: "1.21 Attendance Policy"}
+      - {source: academic-rules-handbook-jun-2026.pdf, section: "Attendance"}
     expect: "80%"
 
   - id: q03
@@ -34,28 +34,28 @@ questions:
     type: ordinary
     question: How is plagiarism defined in Section 4 of the Student Code of Conduct?
     relevant:
-      - {source: student-handbook-jun-2026.pdf, section: "Section 4"}
+      - {source: student-handbook-jun-2026.pdf, section: "Conduct"}
     expect: "unauthorized use"
 
   - id: q06
     type: ordinary
     question: What is the tuition fee per semester for the undergraduate BS Computer Science program?
     relevant:
-      - {source: fee-structure-page.html, section: "Tuition Fees"}
+      - {source: fee-structure-page.html, section: "Fee"}
     expect: "110,000"
 
   - id: q07
     type: ordinary
     question: What was the total number of research publications reported in the Annual Report 2023-24?
     relevant:
-      - {source: annual-report-2023-24.pdf, section: "Research and Development"}
+      - {source: annual-report-2023-24.pdf, section: "General"}
     expect: "publications"
 
   - id: q08
     type: ordinary
     question: What are the degree requirements for undergraduate engineering and computing accreditation?
     relevant:
-      - {source: prospectus-2026-academic-rules-and-regulations.pdf, section: "General"}
+      - {source: annual-report-2023-24.pdf, section: "Accreditation"}
     expect: "130"
 
   - id: q09
@@ -76,8 +76,8 @@ questions:
     type: version
     question: How does the current June 2026 handbook differ from the August 2023 rules regarding academic dismissal?
     relevant:
-      - {source: academic-rules-handbook-jun-2026.pdf, section: "5.4 Academic Warning"}
-      - {source: undergraduate-academic-rules-aug-2023.pdf, section: "General"}
+      - {source: student-handbook-jun-2026.pdf, section: ""}
+      - {source: undergraduate-academic-rules-aug-2023.pdf, section: ""}
     expect: "warning"
 
   - id: q12

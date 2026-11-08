@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+import subprocess
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -77,8 +79,18 @@ def _ocr_page(pdf_path: str, page_number: int) -> str:
         if images:
             text = pytesseract.image_to_string(images[0])
             return text.strip()
-    except Exception as exc:
-        log.warning(f"OCR failed for {pdf_path} page {page_number}: {exc}")
+    except Exception:
+        # Fallback using WSL tesseract and poppler on Windows hosts
+        try:
+            abs_path = os.path.abspath(pdf_path)
+            drive_letter = abs_path[0].lower()
+            wsl_path = f"/mnt/{drive_letter}/" + abs_path[3:].replace("\\", "/")
+            cmd = f'pdftoppm -png -r 150 -f {page_number} -l {page_number} "{wsl_path}" /tmp/ocr_p && tesseract /tmp/ocr_p-*.png stdout 2>/dev/null && rm -f /tmp/ocr_p*'
+            res = subprocess.check_output(['wsl', '-d', 'Ubuntu-24.04', '-e', 'bash', '-c', cmd], text=True, errors='replace')
+            if res.strip():
+                return res.strip()
+        except Exception as wsl_exc:
+            log.warning(f"OCR fallback failed for {pdf_path} page {page_number}: {wsl_exc}")
     return ""
 
 

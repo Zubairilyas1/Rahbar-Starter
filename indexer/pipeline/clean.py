@@ -18,9 +18,10 @@ def clean(doc: Document) -> Document:
     last_lines: list[str] = []
     for p in doc.pages:
         lines = [line.strip() for line in p.text.splitlines() if line.strip()]
-        if len(lines) >= 3:
-            first_lines.append(lines[0])
-            last_lines.append(lines[-1])
+        for line in lines[:4]:
+            first_lines.append(line)
+        for line in lines[-4:]:
+            last_lines.append(line)
 
     header_candidates = {line for line, count in Counter(first_lines).items() if count >= max(2, len(doc.pages) // 3)}
     footer_candidates = {line for line, count in Counter(last_lines).items() if count >= max(2, len(doc.pages) // 3)}
@@ -40,11 +41,11 @@ def clean(doc: Document) -> Document:
                 continue
 
             # Strip recurring running header if near top
-            if idx < 3 and (stripped in header_candidates or page_num_regex.match(stripped)):
+            if idx < 4 and (stripped in header_candidates or page_num_regex.match(stripped)):
                 continue
 
             # Strip recurring running footer if near bottom
-            if idx >= len(lines) - 3 and (stripped in footer_candidates or page_num_regex.match(stripped)):
+            if idx >= len(lines) - 4 and (stripped in footer_candidates or page_num_regex.match(stripped)):
                 continue
 
             filtered_lines.append(line)
