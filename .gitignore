@@ -30,3 +30,5 @@ venv/
 *.log
 .DS_Store
 .coverage
+
+chroma_db/
