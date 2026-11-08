@@ -15,24 +15,28 @@ from ...schemas import Answer, Passage
 log = logging.getLogger("rahbar.llm.ollama")
 
 SYSTEM_PROMPT = """You are RAHBAR, an evidence-grounded academic assistant.
-Answer ONLY using the provided numbered evidence passages.
-If the information required to answer the question is not present in the evidence passages:
-- Set answered_from_context to false.
-- Set answer to "I do not have sufficient information in the provided documents to answer this question."
-- Set citations to an empty list [].
-- Set confidence to "low".
+Answer questions using ONLY the provided numbered evidence passages.
 
-Rules:
-1. Every claim in your answer must be supported by the evidence.
-2. Only cite passages that directly contain the facts mentioned.
-3. Each citation must match the source, section, and page of an evidence passage.
-4. Output MUST be valid JSON conforming to the following schema:
+CRITICAL RULES:
+1. Strict Grounding: Answer strictly using explicit facts found in the evidence passages. NEVER invent, fabricate, or guess numbers, route numbers, codes, dates, or percentages that are not explicitly written in the passages. If the passages mention transport or buses but do NOT state route numbers, you MUST ABSTAIN.
+2. Abstention: If the evidence passages DO NOT contain the exact answer for the specific question:
+   - "answered_from_context": false
+   - "confidence": "low"
+   - "answer": "I do not have sufficient information in the provided documents to answer this question."
+   - "citations": []
+3. Grounded Answer: When evidence passages DO contain the direct answer:
+   - "answered_from_context": true
+   - "confidence": "high"
+   - "answer": Direct, factual response.
+   - "citations": List of citations with exact "source", "section", and "page" from the matching passages.
+
+Output MUST be valid JSON conforming to the following schema:
 {
   "reasoning": "step-by-step thinking",
   "answer": "grounded response text",
   "citations": [{"source": "filename.pdf", "section": "section name", "page": 1}],
-  "answered_from_context": true/false,
-  "confidence": "high"/"medium"/"low"
+  "answered_from_context": true,
+  "confidence": "high"
 }
 """
 
@@ -88,7 +92,40 @@ class OllamaProvider:
                     data = resp.json()
                     content = data.get("message", {}).get("content", "{}")
                     parsed = json.loads(content)
-                    return Answer.model_validate(parsed)
+                    if isinstance(parsed, dict):
+                        if "citations" not in parsed or not isinstance(parsed["citations"], list):
+                            parsed["citations"] = []
+                        if "answered_from_context" not in parsed:
+                            parsed["answered_from_context"] = bool(parsed.get("citations"))
+                        if "confidence" not in parsed or parsed["confidence"] not in ("high", "medium", "low"):
+                            parsed["confidence"] = "high" if parsed.get("citations") else "low"
+                        if "reasoning" not in parsed:
+                            parsed["reasoning"] = ""
+                        if "answer" not in parsed:
+                            parsed["answer"] = ""
+                    ans = Answer.model_validate(parsed)
+                    # Align flags if model answered factually with valid citations
+                    abstention_indicators = (
+                        "do not have sufficient",
+                        "insufficient information",
+                        "do not provide sufficient",
+                        "not explicitly stated",
+                        "not sufficient",
+                        "cannot answer",
+                        "no information",
+                        "not covered",
+                        "not found",
+                    )
+                    is_abstain = any(w in ans.answer.lower() for w in abstention_indicators)
+                    if is_abstain or not ans.citations:
+                        ans.answered_from_context = False
+                        ans.confidence = "low"
+                        ans.citations = []
+                    else:
+                        ans.answered_from_context = True
+                        if ans.confidence == "low":
+                            ans.confidence = "high"
+                    return ans
             except (ValidationError, json.JSONDecodeError) as val_err:
                 log.warning(f"Ollama generation validation error (attempt {attempt + 1}): {val_err}")
                 if attempt == 0:
