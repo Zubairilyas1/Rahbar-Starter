@@ -1,0 +1,17 @@
+Scale demo (dummy-768 local cluster; HPA may reconcile replica count)
+deployment.apps/api scaled
+NAME   READY   UP-TO-DATE   AVAILABLE   AGE
+api    3/3     3            3           22m
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME   ENDPOINTS                                                  AGE
+api    10.244.120.78:8000,10.244.120.81:8000,10.244.120.82:8000   41m
+Deleting api-bd7f689dc-4zzxp
+pod "api-bd7f689dc-4zzxp" deleted
+NAME                  READY   STATUS    RESTARTS      AGE     IP              NODE       NOMINATED NODE   READINESS GATES
+api-bd7f689dc-9x57f   1/1     Running   2 (19m ago)   24m     10.244.120.81   minikube   <none>           <none>
+api-bd7f689dc-9z86d   1/1     Running   2 (19m ago)   24m     10.244.120.78   minikube   <none>           <none>
+api-bd7f689dc-z9v7n   0/1     Running   1 (15s ago)   2m11s   10.244.120.91   minikube   <none>           <none>
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME   ENDPOINTS                               AGE
+api    10.244.120.78:8000,10.244.120.81:8000   43m
+deployment.apps/api scaled

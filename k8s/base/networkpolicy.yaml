@@ -73,7 +73,7 @@ spec:
         - podSelector: {matchLabels: {app: rahbar-indexer}}
       ports: [{protocol: TCP, port: 8000}]
 ---
-# 6. redis from api only.
+# 6. redis from api and indexer (the indexer invalidates cached answers after reindex).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -83,7 +83,9 @@ spec:
   podSelector: {matchLabels: {app: redis}}
   policyTypes: [Ingress]
   ingress:
-    - from: [{podSelector: {matchLabels: {app: api}}}]
+    - from:
+        - podSelector: {matchLabels: {app: api}}
+        - podSelector: {matchLabels: {app: rahbar-indexer}}
       ports: [{protocol: TCP, port: 6379}]
 ---
 # 7. api and indexer -> Ollama on the host (embeddings always go here, chat
@@ -120,7 +122,7 @@ spec:
     - to: [{podSelector: {matchLabels: {app: redis}}}]
       ports: [{protocol: TCP, port: 6379}]
 ---
-# 9. indexer -> chroma egress (store writes the index).
+# 9. indexer -> chroma for index writes and redis for cache invalidation.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -132,3 +134,5 @@ spec:
   egress:
     - to: [{podSelector: {matchLabels: {app: chroma}}}]
       ports: [{protocol: TCP, port: 8000}]
+    - to: [{podSelector: {matchLabels: {app: redis}}}]
+      ports: [{protocol: TCP, port: 6379}]
