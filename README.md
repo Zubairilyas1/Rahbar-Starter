@@ -92,6 +92,14 @@ ollama pull llama3.2:3b
 
 ### Step 3: The Exact Apply Order
 
+Before applying manifests, download the corpus and build the three local images. The indexer image copies `corpus/raw/` at build time, so an image built before `make fetch` cannot index the real documents:
+
+```bash
+make install
+make fetch
+make images
+```
+
 Apply Kubernetes manifests sequentially:
 
 ```bash
@@ -194,7 +202,7 @@ The FastAPI service exposes the following endpoints:
 > **No Indexing at API Startup**: Ingestion is decoupled into a Kubernetes Job. Running indexing inside API startup causes 3 replica pods to race on SQLite database locks and corrupts HNSW index graphs.
 
 > [!NOTE]
-> **Silent Embedding Mismatch Prevention**: At container boot, the API compares `Settings.embed_model` against Chroma collection metadata. If an operator changes the ConfigMap model without reindexing, the API immediately throws a `RuntimeError` and fails fast, preventing corrupt semantic distance calculations.
+> **Silent Embedding Mismatch Prevention**: At container boot, the API logs a model mismatch. Its `/readyz` check returns HTTP 503, keeping the mismatched pod out of Service endpoints until the ConfigMap and collection agree. The observed `0/1 READY` pod and log are in `docs/evidence/embedding-mismatch.txt`.
 
 > [!TIP]
 > **Relevance Floor & Honest Abstention**: When incoming questions lack relevant document passages (top cosine similarity $<0.35$), RAHBAR bypasses the LLM and abstains deterministically with an explicit `null` answer and `low` confidence.
@@ -208,13 +216,14 @@ The FastAPI service exposes the following endpoints:
 
 RAHBAR is gated using a 16-question labeled test suite ([`eval/golden.yaml`](eval/golden.yaml)) scored via [`eval/run_eval.py`](eval/run_eval.py):
 
-| Metric | Target Floor | Measured Result | Status |
+| Metric | Gate | Latest live result | Status |
 |---|---|---|---|
-| **Recall@3** | $\ge 0.65$ | **0.72** | Passed ✅ |
-| **Recall@5** | $\ge 0.70$ | **0.82** | Passed ✅ |
-| **Citation Validity** | $\ge 0.95$ | **0.98** | Passed ✅ |
-| **Abstention Correctness** | $1.00$ | **1.00** | Passed ✅ |
-| **Schema Conformance** | $1.00$ | **1.00** | Passed ✅ |
+| **Recall@3** | Reported, no absolute floor | **0.4583** | Measured |
+| **Recall@5** | May drop at most 0.05 below the committed baseline | **0.50** | Equals baseline; gate passes |
+| **Citation Validity** | $\ge 0.95$ | **1.00** | Gate passes |
+| **Abstention Correctness** | $1.00$ | **1.00** | Gate passes |
+
+These figures come from the latest committed [`eval/results.json`](eval/results.json), not the stub evaluation used in GitHub CI.
 
 ---
 

@@ -52,12 +52,14 @@ This document records the design, engineering trade-offs, and empirical measurem
 
 The chunker uses a structure-aware recursive algorithm: splitting on section headings, then paragraphs, and finally sentences. Overlapping token windows bridge adjacent chunks to ensure questions spanning boundaries retain full context.
 
-### Measured Configurations Against Recall@5
+### Earlier Exploratory Configuration Comparison
 
-| Configuration | Chunk Size (tokens) | Overlap (tokens) | Total Chunks Produced | Recall@5 | Latency (ms) | Notes |
+The comparison below was recorded during development, but its per-configuration result files are not committed. It should not be confused with the reproducible latest live evaluation in `eval/results.json`, where the shipped 400/50 configuration scored **0.50 recall@5** on the current 16-question golden set. The earlier values need reruns under the same corpus and golden set before drawing a performance conclusion.
+
+| Configuration | Chunk Size (tokens) | Overlap (tokens) | Reported chunks | Earlier reported recall@5 | Earlier reported latency (ms) | Notes |
 |---|---|---|---|---|---|---|
 | **Config A (Small)** | 250 | 30 | 1,420 | 0.68 | 42ms | Splits fine-grained definitions prematurely; misses cross-sentence context. |
-| **Config B (Production - Shipped)** | **400** | **50** | **945** | **0.82** | **58ms** | **Optimal balance**: Holds complete legal clauses while staying well within the embedding model context. |
+| **Config B (Production - Shipped)** | **400** | **50** | **945** | **0.82** | **58ms** | Holds complete legal clauses while staying within the embedding model context; latest measured recall@5 is 0.50. |
 | **Config C (Large)** | 600 | 100 | 610 | 0.74 | 86ms | Embeddings become diluted; lower similarity scores for specific numerical questions. |
 
 ### Storage Amplification
