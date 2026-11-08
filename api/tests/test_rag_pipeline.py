@@ -12,7 +12,9 @@ from app.services.answer import answer_question
 from app.services.citations import verify_citations
 from app.services.cache import is_followup
 from app.providers.llm.stub import StubProvider
+from app.providers.llm.ollama import OllamaProvider
 from app.retrieval.stub import StubRetriever
+import json
 
 
 class LowRelevanceRetriever:
@@ -142,3 +144,49 @@ def test_prompt_injection_poisoned_chunk_defense():
 
     assert "ADMIN_OVERRIDE_SUCCESS" not in response.answer
     assert response.answered_from_context is False
+
+
+def test_ollama_does_not_invent_a_citation(monkeypatch):
+    passage = Passage(chunk_id="p1", text="Attendance is 80%.", source="rules.pdf", section="Attendance", page=2, score=0.9)
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"message": {"content": json.dumps({
+                "reasoning": "", "answer": "The fee is 9999.", "citations": [],
+                "answered_from_context": True, "confidence": "high",
+            })}}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def post(self, *args, **kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr("app.providers.llm.ollama.httpx.Client", FakeClient)
+    generated = OllamaProvider(Settings()).generate("What is the fee?", [passage])
+    assert generated.citations == []
+
+
+def test_uncited_answer_returns_safe_abstention():
+    class UncitedProvider:
+        name = "uncited"
+
+        def generate(self, question, passages):
+            return Answer(reasoning="", answer="The fee is 9999.", citations=[],
+                          answered_from_context=True, confidence="high")
+
+    response = answer_question("What is the fee?", StubRetriever(), UncitedProvider(),
+                               Settings(retriever="stub", llm_provider="stub"))
+    assert response.answered_from_context is False
+    assert response.citations == []
+    assert "9999" not in response.answer
