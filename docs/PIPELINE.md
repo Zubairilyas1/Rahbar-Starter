@@ -78,5 +78,5 @@ The shipped configuration produces an amplification ratio of approximately **1.1
     "hnsw:space": "cosine"
   }
   ```
-- **Similarity Threshold**: Query similarity is calculated as $1 - \text{cosine distance}$. The relevance floor is set to `0.50` to trigger abstention on out-of-corpus queries.
+- **Similarity Threshold**: Query similarity is calculated as $1 - \text{cosine distance}$. The relevance floor is set to `0.35` to admit valid factual queries while triggering deterministic abstention on out-of-corpus queries.
 - **Resource Profiling**: Under local Minikube testing verified via `kubectl top pods -n rahbar`, the indexer Job peaks at ~280m CPU and ~410Mi memory during batch embedding.
