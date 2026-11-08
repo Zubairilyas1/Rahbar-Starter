@@ -1,7 +1,6 @@
 # The only writer to Chroma (ADR 0001, docs/ARCHITECTURE.md). One-shot; the API
-# never indexes. Memory limit 768Mi matches the measurement already written up in
-# docs/ENGINEERING-NOTES.md Q4 (observed peak ~410Mi during OCR, ~46% headroom) --
-# keep these two numbers in sync if either changes.
+# never indexes. Memory limit is 768Mi; a real-corpus peak is not yet captured
+# in docs/evidence/ (see docs/ENGINEERING-NOTES.md Q4).
 apiVersion: batch/v1
 kind: Job
 metadata:
