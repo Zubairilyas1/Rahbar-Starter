@@ -111,12 +111,42 @@ def answer_question(
     if answer.citations and not verified_citations:
         log.warning(f"[{request_id}] All model citations were ungrounded and dropped.")
 
+    abstention_indicators = (
+        "do not have sufficient",
+        "insufficient information",
+        "do not provide sufficient",
+        "not explicitly stated",
+        "not explicitly mentioned",
+        "no direct answer",
+        "unable to answer",
+        "not mentioned",
+        "not provided",
+        "not sufficient",
+        "cannot answer",
+        "no information",
+        "not covered",
+        "not found",
+    )
+    is_abstention_text = any(phrase in answer.answer.lower() for phrase in abstention_indicators)
+
+    answered_from_context = answer.answered_from_context
+    confidence = answer.confidence
+
+    if is_abstention_text or not verified_citations:
+        answered_from_context = False
+        confidence = "low"
+        verified_citations = []
+    else:
+        answered_from_context = True
+        if confidence == "low":
+            confidence = "high"
+
     response = AskResponse(
         request_id=request_id,
         answer=answer.answer,
         citations=verified_citations,
-        answered_from_context=answer.answered_from_context,
-        confidence=answer.confidence,
+        answered_from_context=answered_from_context,
+        confidence=confidence,
         retrieved=retrieved_refs,
         provider=provider.name,
     )
