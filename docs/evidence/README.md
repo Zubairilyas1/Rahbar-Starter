@@ -4,8 +4,8 @@ Captured from the live minikube cluster with `RETRIEVER=chroma` and `LLM_PROVIDE
 
 - [ ] `branch-protection.png` -- the `main` branch protection settings page.
 - [x] `approval-blocked-merge.png` -- PR merge button greyed out pending review approval.
-- [x] `blocked-merge.png` -- PR #13 with an intentional failing `CI / test` check and a disabled merge button. The failing test was removed in the next commit; the demo PR is not intended for merge.
-- [x] `green-checks.png` -- after removing the intentional failure, all eight CI checks passed on PR #13. Its merge button still required an independent reviewer, so the temporary PR was closed without merging.
+- [x] `blocked-merge.png` -- PR #13 with an intentional failing `CI / test` check and a disabled merge button. The failing test was removed in the next commit.
+- [x] `green-checks.png` -- after removing the intentional failure, all eight CI checks passed on PR #13. Its merge button still required an independent reviewer when captured. PR #13 was subsequently approved and merged; its two test commits cancel out, so no failing test is present on `main`.
 - [x] `kubectl-top-pods.txt` -- `kubectl top pods -n rahbar` after the dummy indexer Job completed; the real-corpus indexer peak remains unmeasured.
 - [x] `get-endpoints.txt` -- `kubectl get endpoints -n rahbar` showing the `api` Service
       with 3+ pod IPs.
