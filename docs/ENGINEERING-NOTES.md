@@ -77,21 +77,18 @@ The live minikube run so far used the dummy indexer and finished before `kubectl
 
 ## 5. recall@5 by question type: where is it worst, and why?
 
-In our evaluation results ([`eval/results.json`](../eval/results.json)), recall@5 varies substantially by query category:
-- **Ordinary conceptual queries**: `0.85`
-- **Cross-version queries**: `0.80`
-- **Exact-term & tabular queries**: `0.75` (Worst performing category)
+In the latest live evaluation ([`eval/results.json`](../eval/results.json)), overall recall@5 is `0.50`. By question type, ordinary queries are worst at `0.375`, version queries score `0.50`, and exact-term queries score `1.00`. This is a small 16-question set, so the per-type figures should not be treated as stable population estimates.
 
-**Why Embeddings Struggle on Exact Terms:**  
-Dense embedding models like `nomic-embed-text` project text into a continuous latent semantic manifold. They excel at understanding that *"mandatory attendance"* is semantically close to *"compulsory physical presence"*. However, exact alphanumeric identifiers like course codes (`CS4032`, `CL217`), clause markers (`1.21`, `5.4`), and exact rupee figures (`110,000`) carry minimal semantic weight in dense vector space. In fact, vector embeddings often map different course codes close together because their linguistic context is identical (*"enrolled in course [X]"*).
+**Why ordinary queries are difficult here:**
+Several ordinary questions ask for a specific fact inside long handbook or report passages, while the query uses broader wording than the source. A dense top-5 search can rank semantically related but insufficient passages ahead of the precise answer. The current summary does not include per-question retrieved chunks, so this is a plausible diagnosis rather than a verified cause for every miss. Exact-term questions performed well in this run; their alphanumeric anchors likely made them easier to locate.
 
 **The Lecture Remedy:**  
-The definitive solution presented in the RAG lecture is **Hybrid Search**:
-1. Execute sparse lexical search (BM25 / SPLADE) to catch exact keyword matches (clause numbers and course codes).
-2. Execute dense semantic search for conceptual understanding.
+**Hybrid Search** could combine exact anchors with semantic matches, followed by reranking of candidate passages:
+1. Execute sparse lexical search (BM25) for names, figures, and clause numbers.
+2. Execute dense semantic search for paraphrases and broader concepts.
 3. Fuse the rankings using **Reciprocal Rank Fusion (RRF)**:
    $$RRF(d) = \sum_{m \in M} \frac{1}{k + r_m(d)}$$
-This guarantees that exact clause queries surface at position 1 regardless of embedding proximity.
+The fused candidates would then be checked against the missed ordinary questions before claiming an improvement.
 
 ---
 
