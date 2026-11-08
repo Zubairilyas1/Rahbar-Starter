@@ -205,7 +205,7 @@ The FastAPI service exposes the following endpoints:
 > **Silent Embedding Mismatch Prevention**: At container boot, the API logs a model mismatch. Its `/readyz` check returns HTTP 503, keeping the mismatched pod out of Service endpoints until the ConfigMap and collection agree. The observed `0/1 READY` pod and log are in `docs/evidence/embedding-mismatch.txt`.
 
 > [!TIP]
-> **Relevance Floor & Honest Abstention**: When incoming questions lack relevant document passages (top cosine similarity $<0.35$), RAHBAR bypasses the LLM and abstains deterministically with an explicit `null` answer and `low` confidence.
+> **Relevance Floor & Honest Abstention**: When incoming questions lack relevant document passages (top cosine similarity $<0.50$), RAHBAR bypasses the LLM and abstains deterministically with an explicit `null` answer and `low` confidence.
 
 > [!WARNING]
 > **Citation Verification**: Every citation produced by the LLM is programmatically checked against retrieved chunks. Ungrounded or hallucinated section/page citations are automatically dropped.

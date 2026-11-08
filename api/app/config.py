@@ -35,7 +35,7 @@ class Settings:
 
     # Retrieval and grounding
     top_k: int = 5
-    relevance_floor: float = 0.35     # RELEVANCE_FLOOR: minimum similarity to answer from context
+    relevance_floor: float = 0.50     # RELEVANCE_FLOOR: minimum similarity to answer from context
     temperature: float = 0.2
     llm_model: str = "llama3.2:3b"
     llm_timeout: float = 30.0
@@ -60,7 +60,7 @@ def get_settings() -> Settings:
         chroma_port=_int("CHROMA_PORT", 8000),
         collection=os.environ.get("CHROMA_COLLECTION", "rahbar"),
         top_k=_int("TOP_K", 5),
-        relevance_floor=_float("RELEVANCE_FLOOR", 0.35),
+        relevance_floor=_float("RELEVANCE_FLOOR", 0.50),
         temperature=_float("TEMPERATURE", 0.2),
         llm_model=os.environ.get("LLM_MODEL", "llama3.2:3b"),
         llm_timeout=_float("LLM_TIMEOUT", 30.0),

@@ -2,7 +2,7 @@
 
 Captured from the live minikube cluster with `RETRIEVER=chroma` and `LLM_PROVIDER=ollama-host`. The collection was populated by the dummy indexer (`EMBED_MODEL=dummy-768`), so these files prove the Kubernetes behavior, not real-corpus answer quality. Minimum 5 files are required by the submission checker:
 
-- [ ] `branch-protection.png` -- the `main` branch protection settings page.
+- [ ] Saved `main` branch protection settings, including the required status-check names and one approval. `Screenshot (855).png` shows that a `main` rule exists; `Screenshot (849).png` shows the setup form before it was saved and does not prove the final check list.
 - [x] `approval-blocked-merge.png` -- PR merge button greyed out pending review approval.
 - [x] `blocked-merge.png` -- PR #13 with an intentional failing `CI / test` check and a disabled merge button. The failing test was removed in the next commit.
 - [x] `green-checks.png` -- after removing the intentional failure, all eight CI checks passed on PR #13. Its merge button still required an independent reviewer when captured. PR #13 was subsequently approved and merged; its two test commits cancel out, so no failing test is present on `main`.
@@ -20,8 +20,6 @@ Captured from the live minikube cluster with `RETRIEVER=chroma` and `LLM_PROVIDE
 
 `reindex-without-redeploy.txt` shows the dummy reindex Job completing while the API Deployment generation remained 9. Its first run exposed a NetworkPolicy gap that blocked the indexer's Redis cache invalidation. The policy was corrected in `k8s/base/networkpolicy.yaml`; `reindex-cache-invalidation.txt` records the verification run after that fix.
 
-## Live Pipeline & Cluster Verification Screenshots
-The following screenshots (`Screenshot (845).png` through `Screenshot (855).png`) document live environment operations:
-- **GitHub PR & Gate Verification**: CI/CD pipeline runs, branch protection rules, evaluation gating, and approval workflows.
-- **Minikube & Kubernetes Operations**: Live pod states, Services with healthy endpoints, HPA autoscaling metrics, and rollout verification.
-- **RAG Answering & Web UI**: Interactive user queries, grounding validation, citation rendering, and honest abstention behavior.
+## Additional screenshots
+
+`Screenshot (849).png` captures the branch protection form with one approval and status checks selected, and `Screenshot (855).png` captures the saved rule list. The other numbered screenshots show unrelated pages or PR #12 review activity; they are not evidence of Minikube, live RAG answers, or the saved required check list. Cluster evidence is in the text captures above.

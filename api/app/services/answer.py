@@ -129,21 +129,18 @@ def answer_question(
     )
     is_abstention_text = any(phrase in answer.answer.lower() for phrase in abstention_indicators)
 
-    answered_from_context = answer.answered_from_context
-    confidence = answer.confidence
-
-    if is_abstention_text or not verified_citations:
-        answered_from_context = False
+    answered_from_context = answer.answered_from_context and not is_abstention_text and bool(verified_citations)
+    if not answered_from_context:
+        answer_text = "I do not have sufficient information in the provided documents to answer this question."
         confidence = "low"
         verified_citations = []
     else:
-        answered_from_context = True
-        if confidence == "low":
-            confidence = "high"
+        answer_text = answer.answer
+        confidence = answer.confidence
 
     response = AskResponse(
         request_id=request_id,
-        answer=answer.answer,
+        answer=answer_text,
         citations=verified_citations,
         answered_from_context=answered_from_context,
         confidence=confidence,
