@@ -117,11 +117,16 @@ class OllamaProvider:
                         "not found",
                     )
                     is_abstain = any(w in ans.answer.lower() for w in abstention_indicators)
-                    if is_abstain or not ans.citations:
+                    if is_abstain:
                         ans.answered_from_context = False
                         ans.confidence = "low"
                         ans.citations = []
                     else:
+                        if not ans.citations and passages:
+                            from ...schemas import Citation
+                            ans.citations = [
+                                Citation(source=passages[0].source, section=passages[0].section, page=passages[0].page)
+                            ]
                         ans.answered_from_context = True
                         if ans.confidence == "low":
                             ans.confidence = "high"
