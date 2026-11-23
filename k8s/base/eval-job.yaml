@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rahbar-eval-job
+  namespace: rahbar
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels: {app: eval-job}
+    spec:
+      serviceAccountName: rahbar-api
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: evaluator
+          image: rahbar-api:dev
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - eval.release_gate
+            - --baseline
+            - eval/results/three_level_eval.json
+            - --candidate
+            - eval/results/candidate_tuned_eval.json
+          envFrom:
+            - configMapRef: {name: rahbar-config}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: tmp
+          emptyDir: {}
