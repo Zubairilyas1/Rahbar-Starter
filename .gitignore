@@ -10,6 +10,8 @@ kubeconfig
 
 # Corpus files you did not write: commit corpus/MANIFEST.md and corpus/fetch.py instead
 corpus/raw/
+corpus/quarantine/
+corpus/archive/
 
 # Assignment specs, zips and scratch extractions
 *.pdf
