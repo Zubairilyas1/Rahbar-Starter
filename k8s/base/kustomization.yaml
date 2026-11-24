@@ -16,3 +16,5 @@ resources:
   - api-deployment.yaml
   - hpa.yaml
   - reindex-cronjob.yaml
+  - corpus-pvc.yaml
+  - eval-job.yaml
