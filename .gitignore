@@ -15,6 +15,7 @@ corpus/archive/
 
 # Assignment specs, zips and scratch extractions
 *.pdf
+!docs/*.pdf
 *.zip
 pdf_extracted_text.txt
 rahbar-starter/
