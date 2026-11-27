@@ -236,7 +236,7 @@ def stage_map() -> list[Any]:
         ["Update retrieval sources", "Upsert into Chroma with doc_version/superseded metadata; archived chunks excluded by filter; rollback restores them",
          "indexer/pipeline/store.py; api/app/retrieval/chroma.py", "Candidate collections are full rebuilds, not incremental copies"],
         ["Offline testing", "Module / component / end-to-end suite, run twice with fixed seeds, as a Kubernetes Job; release gate on the result",
-         "eval/test_three_levels.py, release_gate.py, job.py; k8s/eval-job.yaml", "Single LLM judge; no human panel beyond the labelled sample"],
+         "eval/test_three_levels.py, release_gate.py, job.py; k8s/eval-job.yaml", "Deterministic grounding judge (misses wrong-entity facts); 8 hand labels only; CPU latency"],
         ["Live testing", "Every query writes a trace (stdout + volume) and Prometheus metrics; trace tool, window summary, root-cause tool",
          "api/app/tracing.py, routes/metrics.py; traces/*.py", "No alerting rules or dashboards"],
         ["Check coverage", "Live queries vs golden set by embedding similarity; exits 1 below the required share; uncovered topics grouped",
@@ -255,7 +255,7 @@ def qualities(d: dict[str, Any]) -> list[Any]:
         ["Adaptability", "Recall@5 change when chunking changes (Part C); data drift after Batch B (E3)",
          "recall@5 drop &le; 0.02", f"baseline recall@5 = {fmt(comp.get('recall_at_5'))}; candidate files in eval/results/cluster"],
         ["Monitorability", "Top-1 similarity, abstention rate, cache hit rate, p95 per stage, injections (D3)",
-         "p95 total &le; 30 s", "traces/metrics_summary.py; /metrics on svc/api"],
+         "p95 total &le; 90 s (gate)", "traces/metrics_summary.py; /metrics on svc/api"],
         ["Observability", "One JSON trace per query with all D1 fields, on stdout and on the traces volume",
          "100% of queries traced", "api/app/tracing.py; traces/cluster/"],
         ["Traceability", "Trace id rebuilds exact prompt (hash verified), chunk ids, doc versions, collection/embedding version",
@@ -275,8 +275,9 @@ def part_a(d: dict[str, Any]) -> list[Any]:
             flags = ["P" if c["passed"] else "F" for c in r["checks"]]
             reason = "; ".join(c["reason"] for c in r["checks"] if not c["passed"])
             if not reason and r.get("supersedes"):
-                reason = "passed; supersedes " + ", ".join(r["supersedes"]) + " (archived)"
-            rows.append([esc(r["source"][:44]), *flags, ("QUARANTINED: " if r["quarantined"] else "PASS ") + esc(reason[:120])])
+                reason = "supersedes " + ", ".join(r["supersedes"]) + " (archived)"
+            rows.append([esc(r["source"][:44]), *flags,
+                         ("QUARANTINED: " if r["quarantined"] else ("PASS: " if reason else "PASS")) + esc(reason[:200])])
         out += [P(f"Verification report for Batch B ({v['timestamp']}): {v['passed_documents']} of {v['total_documents']} "
                   f"documents passed, {v['quarantined_documents']} were quarantined and never indexed "
                   "(Q quality, C completeness, R recency, U uniqueness).", BODY),
@@ -348,7 +349,11 @@ def part_b(d: dict[str, Any]) -> list[Any]:
     out.append(P(f"Golden set: {cfg.get('golden_questions')} questions (eval/golden.jsonl; answerable, must-abstain and hard "
                  f"paraphrase / multi-chunk / Batch B questions, labelled human or synthetic). Target collection "
                  f"<i>{esc(b['target'].get('collection'))}</i>, seed {cfg.get('seed')}, the whole suite run {cfg.get('repeat')} times, "
-                 f"semantic cache bypassed. Judge: {esc(cfg.get('judge_model'))} at temperature 0.", BODY))
+                 f"semantic cache bypassed. Generator: llama3.2:3b on CPU-only Ollama (all latencies in this report are CPU numbers). "
+                 "Faithfulness judge: a deterministic grounding check (every number in the answer must appear in the retrieved "
+                 "context, and at least 60% of its content words). We first used llama3.2:3b as an LLM judge, but its verdicts "
+                 "contradicted its own reasons (0.06 faithfulness while its reasons said 'directly supported'), so we replaced it "
+                 "and kept that run aside (eval/results/cluster/superseded_llm_judge/).", BODY))
     rows = [["Level", "Metric", "Run 1", "Run 2", "Diff"]]
     for lvl, level, key, label in SUITE_ROWS:
         a, c = run_value(b, 0, level, key), run_value(b, 1, level, key)
@@ -367,13 +372,28 @@ def part_b(d: dict[str, Any]) -> list[Any]:
     if e2e.get("judge_human_compared", 0) < 8:
         out.append(P("Judge calibration: " + pending("8 hand labels: python eval/label_answers.py --result <baseline result> --n 8"), BODY))
     else:
-        out.append(P(f"The LLM judge agreed with our hand labels on {fmt(e2e.get('judge_human_agreement'), 3)} of "
-                     f"{e2e.get('judge_human_compared')} answers (disagreements: {esc(', '.join(e2e.get('judge_human_disagreements') or []) or 'none')}).", BODY))
+        out.append(P(f"Judge calibration: the grounding judge agreed with our hand labels on {fmt(e2e.get('judge_human_agreement'), 3)} of "
+                     f"{e2e.get('judge_human_compared')} answers (disagreements: {esc(', '.join(e2e.get('judge_human_disagreements') or []) or 'none')}). In g31 the "
+                     "numbers 8:00 AM to 4:00 PM are in the retrieved text but belong to the medical centre, not the gym: a number "
+                     "check cannot see that the fact is about the wrong entity.", BODY))
     st = b.get("stochasticity", {})
-    out.append(P(f"Stochasticity: the largest run-to-run difference over quality metrics is {fmt(st.get('max_abs_delta'), 4)}. "
-                 "Seeds are fixed for the typo generator (Python RNG), the generator LLM (seed 42, temperature 0.2) and the judge "
-                 "(seed 42, temperature 0). Embeddings are deterministic (max |diff| above). Latency still varies with CPU load "
-                 "on the laptop, and Ollama's sampling is only reproducible on the same hardware and build.", BODY))
+    pipeline_deltas = {k: abs(v["delta"]) for k, v in st.get("metrics", {}).items()
+                       if not any(x in k for x in ("latency", "time_ms", "total", "questions", "judged", "compared",
+                                                   "pairs", "measured", "judge_human"))}
+    worst = max(pipeline_deltas.items(), key=lambda kv: kv[1]) if pipeline_deltas else ("-", 0.0)
+    runs = b.get("runs", [])
+    changed = [q for q in runs[0]["per_question"] if len(runs) > 1
+               and runs[0]["per_question"][q].get("answer") != runs[1]["per_question"].get(q, {}).get("answer")] if runs else []
+    f1 = run_value(b, 0, "end_to_end_level", "faithfulness")
+    f2 = run_value(b, 1, "end_to_end_level", "faithfulness")
+    out.append(P(f"Stochasticity: the largest run-to-run difference over pipeline metrics is {fmt(worst[1], 4)} "
+                 f"({esc(worst[0].split('.')[-1])}). "
+                 "Seeds are fixed (Python RNG for the typo test, LLM seed 42 at temperature 0.2), embeddings are identical "
+                 "(max |diff| 0), and the judge is deterministic. All the module and component metrics are identical across "
+                 "runs. The remaining variation is end to end: llama.cpp on CPU is not bit-for-bit reproducible across threads "
+                 f"even with a fixed seed, so {len(changed)} of {len(runs[0]['per_question']) if runs else 0} answers changed between runs "
+                 f"({esc(', '.join(changed))}; faithfulness {fmt(f1, 2)} vs {fmt(f2, 2)}). Run 2 is much "
+                 "faster because Ollama reuses cached prompt prefixes for the identical prompts, so latency is reported, and gated, on run 1.", BODY))
     return out
 
 
@@ -382,13 +402,14 @@ def part_c(d: dict[str, Any]) -> list[Any]:
     out.append(P("Change: chunk size/overlap (baseline 400/50 in collection <i>rahbar</i>; candidate 600/100 in <i>rahbar_c600</i>; "
                  "a deliberately bad 120/0 in <i>rahbar_c120</i>). Each candidate runs as Deployment <i>api-candidate</i> with its own "
                  "Service and collection, and the eval Job tests it (k8s/eval-job.yaml).", BODY))
-    b, good, bad = d.get("part_b"), d.get("cand_good"), d.get("cand_bad")
+    # Candidates were built after Batch B, so they are compared with the baseline measured on the same data.
+    b, good, bad = d.get("after_batch_b") or d.get("part_b"), d.get("cand_good"), d.get("cand_bad")
     keys = [("module_level", "separation_gap", "Embedding gap"), ("component_level", "recall_at_3", "Recall@3"),
             ("component_level", "recall_at_5", "Recall@5"), ("component_level", "mrr", "MRR"),
             ("component_level", "ndcg_at_5", "nDCG@5"), ("end_to_end_level", "faithfulness", "Faithfulness"),
             ("end_to_end_level", "abstention_correctness", "Abstention correctness"),
             ("end_to_end_level", "citation_validity", "Citation validity"), ("end_to_end_level", "latency_p95_s", "Latency p95 (s)")]
-    rows = [["Metric", "Baseline (400/50)", "Candidate 600/100", "Bad 120/0"]]
+    rows = [["Metric", "Baseline 400/50 (after Batch B)", "Candidate 600/100", "Bad 120/0"]]
     for level, key, label in keys:
         rows.append([label] + [fmt(x.get(level, {}).get(key), 4) if x else pending(f"{n} result") for x, n in
                                ((b, "baseline"), (good, "candidate c600"), (bad, "candidate c120"))])
@@ -409,7 +430,11 @@ def part_c(d: dict[str, Any]) -> list[Any]:
     if gp and gp["passed"]:
         out.append(P("<b>Release decision: RELEASE rahbar_c600.</b> It meets every threshold, so it was promoted to Deployment "
                      "<i>api</i> with a rolling update (maxUnavailable 0) and watched with kubectl rollout status. The c120 "
-                     "candidate was stopped by the gate and never rolled out.", BODY))
+                     "candidate was stopped by the gate and never rolled out. Caveat: c600's false-abstention rate on answerable "
+                     f"questions is higher ({fmt((good or {}).get('end_to_end_level', {}).get('false_abstention_rate'), 3)} vs "
+                     f"{fmt((b or {}).get('end_to_end_level', {}).get('false_abstention_rate'), 3)}), and the gate does not check it. "
+                     "That is a gap in our thresholds, not a reason the gate gave. A threshold edit in the ConfigMap (p95 &le; 50 s) "
+                     "turned the same c600 result into FAIL without any rebuild (screenshot F4).", BODY))
     elif gp is None and good is not None:
         out.append(P("Release decision: " + pending("gate record for c600"), BODY))
     return out
@@ -430,11 +455,13 @@ def part_d(d: dict[str, Any]) -> list[Any]:
     if recs:
         from metrics_summary import summarize
 
-        live = [r for r in recs if not str(r.get("trace_id", "")).startswith("eval-")] or recs
-        s = summarize(live)
+        n_live = sum(not str(r.get("trace_id", "")).startswith("eval-") for r in recs)
+        s = summarize(recs)
         t = s["top1_similarity"]
-        rows = [["Metric (D3)", "Value"],
-                ["Queries in window", f"{s['queries']} ({esc(live[0]['timestamp'])} to {esc(live[-1]['timestamp'])})"],
+        rows = [["Metric (D3, traces/metrics_summary.py)", "Value"],
+                ["Queries in window", f"{s['queries']} ({n_live} sent by us, {s['queries'] - n_live} by the eval Jobs); "
+                                      f"{esc(recs[0]['timestamp'])} to {esc(recs[-1]['timestamp'])}"],
+                ["Collections served", esc(", ".join(s["collections"]))],
                 ["Top-1 similarity min / p50 / mean / p95 / max", f"{t['min']} / {t['p50']} / {t['mean']} / {t['p95']} / {t['max']}"],
                 ["Abstention rate", fmt(s["abstention_rate"], 3)], ["Cache hit rate", fmt(s["cache_hit_rate"], 3)],
                 ["p95 latency per stage (ms)", esc(", ".join(f"{k} {v}" for k, v in s["p95_latency_ms"].items()))],
@@ -511,7 +538,8 @@ def part_f(d: dict[str, Any]) -> list[Any]:
             ["Part B suite as a Job, fails on a failed gate", "Job rahbar-eval (k8s/eval-job.yaml), backoffLimit 0, result on PVC rahbar-results"],
             ["Gate thresholds without rebuild", "ConfigMap rahbar-gate (GATE_* env); gate-only Job re-applies the gate"],
             ["Controlled release", "Deployment + Service api-candidate (own collection), then a rolling update of api (maxUnavailable 0), kubectl rollout undo"],
-            ["Observability on the cluster", "Traces on stdout (kubectl logs) + PVC rahbar-traces; /metrics via kubectl port-forward"]]
+            ["Observability on the cluster", "Traces on stdout (kubectl logs) + PVC rahbar-traces; /metrics via kubectl port-forward"],
+            ["Cluster used", "Docker Desktop Kubernetes v1.36 (overlay k8s/overlays/docker-desktop), Ollama in Docker on CPU. kubectl exec/cp are broken there, so volume access uses short Jobs (scripts/cluster_files.py)"]]
     out.append(table(rows, [6.0, 11.0], font_size=9.5))
     stats = sorted(SHOT_DIR.glob("docker-stats-*.txt")) if SHOT_DIR.exists() else []
     if stats:
@@ -551,22 +579,26 @@ def short_answers(d: dict[str, Any]) -> list[Any]:
     else:
         a = pending("Batch B verification report")
     b = d.get("part_b") or {}
-    m, c_ = b.get("module_level", {}), b.get("component_level", {})
+    base = d.get("after_batch_b") or b        # the baseline the candidates were gated against
+    m, c_ = base.get("module_level", {}), base.get("component_level", {})
     bad = d.get("cand_bad") or {}
     answers = [
         ("(a)", a),
         ("(b)", (f"The c120 candidate uses the same embedding model, so its module level matches the baseline (gap "
                  f"{fmt(bad.get('module_level', {}).get('separation_gap'))} vs {fmt(m.get('separation_gap'))}). Its component and "
                  f"end-to-end numbers drop (recall@5 {fmt(bad.get('component_level', {}).get('recall_at_5'))} vs "
-                 f"{fmt(c_.get('recall_at_5'))}): 120-token chunks cut clauses apart, which an embedding test cannot see.")
+                 f"{fmt(c_.get('recall_at_5'))}, MRR {fmt(bad.get('component_level', {}).get('mrr'))} vs {fmt(c_.get('mrr'))}, "
+                 f"faithfulness {fmt(bad.get('end_to_end_level', {}).get('faithfulness'))} vs "
+                 f"{fmt(base.get('end_to_end_level', {}).get('faithfulness'))}): 120-token chunks cut clauses apart, which an embedding test cannot see.")
          if bad else pending("candidate c120 result")),
         ("(c)", "We archive. A superseded document's chunks stay in Chroma with superseded=True and its file moves to /datalake/archive, "
                 "so retrieval excludes it by metadata and the rollback Job can restore it in seconds. Deleting it would break the "
                 "rollback, historical questions (the filter is lifted when a question asks about an older year), and the trail "
                 "of which version an old trace's answer came from (traces record doc_version)."),
-        ("(d)", f"Faithfulness. It comes from a 3B-parameter local judge whose agreement with us was "
-                f"{fmt(b.get('end_to_end_level', {}).get('judge_human_agreement'))} on a small labelled sample, and a lenient "
-                "judge rewards fluent paraphrase. Latency is also fragile because it depends on laptop load."),
+        ("(d)", f"Faithfulness. The LLM judge we tried first was unusable. The grounding check that replaced it agreed with our "
+                f"labels on {fmt(b.get('end_to_end_level', {}).get('judge_human_agreement'))} of 8 answers, but it only checks that numbers "
+                "and words appear in the context, so it accepts a right number about the wrong thing (g31). Eight labels is a small "
+                "sample, and the generator is not bit-for-bit reproducible on CPU. Latency is next: it depends on laptop load and Ollama's prompt cache."),
         ("(e)", "Testing the data lifecycle against its own evolving data (incremental verification against everything already "
                 "indexed) was the hardest part. Exact duplicates, near-duplicates and newer versions must be judged across batches, "
                 "not inside one batch. We keep whole-document embeddings and versions in the ingestion state. The paper's "
@@ -588,12 +620,14 @@ def contribution() -> list[Any]:
             ["C", "Release gate (release_gate.py), gate ConfigMap", "Candidate collections and comparison"],
             ["D", "Trace schema, trace tool (inspect.py), injection rail", "Metrics summary, root-cause tool, /metrics"],
             ["E", "Coverage checker, live query log", "New golden questions, drift analysis"],
-            ["F", "PVCs, eval Job, toolbox, network policies", "Candidate Deployment, rollout and undo, resource measurements"],
+            ["F", "PVCs, eval Job, Job-based volume access, network policies", "Candidate Deployment, rollout and undo, resource measurements"],
             ["Report", "Sections 1-5, screenshots A-C", "Sections 6-9, screenshots D-F"]]
     return [P("10. Contribution and AI statement", H1), table(rows, [1.6, 7.7, 7.7], font_size=9.5),
             Spacer(1, 4),
             P("<b>AI statement.</b> We used AI assistants (Claude, Gemini) to draft and refactor code, Kubernetes manifests and parts of "
-              "this report. Every number comes from our own pipeline runs on our cluster, and both members reviewed and can explain every change.", BODY)]
+              "this report, and to drive the cluster runs and terminal captures. Every number comes from our own pipeline runs on our "
+              "cluster (result files in eval/results/cluster), the 8 faithfulness labels were made by hand, and both members reviewed "
+              "and can explain every change.", BODY)]
 
 
 def appendix() -> list[Any]:

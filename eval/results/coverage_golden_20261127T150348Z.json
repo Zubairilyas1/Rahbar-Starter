@@ -1,0 +1,509 @@
+{
+  "total_live_queries": 40,
+  "total_golden_questions": 32,
+  "coverage_threshold": 0.75,
+  "covered_queries": 18,
+  "gap_queries": 22,
+  "coverage_percentage": 45.0,
+  "topic_breakdown": {
+    "grading_warning": {
+      "total": 1,
+      "gaps": 0,
+      "coverage_pct": 100.0
+    },
+    "probation": {
+      "total": 1,
+      "gaps": 0,
+      "coverage_pct": 100.0
+    },
+    "grading": {
+      "total": 3,
+      "gaps": 2,
+      "coverage_pct": 33.3
+    },
+    "course_repeat": {
+      "total": 2,
+      "gaps": 1,
+      "coverage_pct": 50.0
+    },
+    "fee_refund": {
+      "total": 1,
+      "gaps": 0,
+      "coverage_pct": 100.0
+    },
+    "course_load": {
+      "total": 3,
+      "gaps": 2,
+      "coverage_pct": 33.3
+    },
+    "attendance": {
+      "total": 2,
+      "gaps": 1,
+      "coverage_pct": 50.0
+    },
+    "discipline": {
+      "total": 1,
+      "gaps": 0,
+      "coverage_pct": 100.0
+    },
+    "entrepreneurship": {
+      "total": 2,
+      "gaps": 0,
+      "coverage_pct": 100.0
+    },
+    "course_drop": {
+      "total": 1,
+      "gaps": 0,
+      "coverage_pct": 100.0
+    },
+    "graduation": {
+      "total": 3,
+      "gaps": 1,
+      "coverage_pct": 66.7
+    },
+    "admissions": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    },
+    "scholarships": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    },
+    "grading_appeal": {
+      "total": 1,
+      "gaps": 0,
+      "coverage_pct": 100.0
+    },
+    "exam_policy": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    },
+    "semester_freeze": {
+      "total": 1,
+      "gaps": 0,
+      "coverage_pct": 100.0
+    },
+    "fee_structure": {
+      "total": 2,
+      "gaps": 2,
+      "coverage_pct": 0.0
+    },
+    "transcript": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    },
+    "campus_wifi": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    },
+    "sports_complex": {
+      "total": 3,
+      "gaps": 1,
+      "coverage_pct": 66.7
+    },
+    "parking_regulations": {
+      "total": 1,
+      "gaps": 0,
+      "coverage_pct": 100.0
+    },
+    "hostel_curfew": {
+      "total": 2,
+      "gaps": 2,
+      "coverage_pct": 0.0
+    },
+    "cafeteria": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    },
+    "exchange_program": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    },
+    "library": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    },
+    "campus_life": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    },
+    "it_support": {
+      "total": 1,
+      "gaps": 1,
+      "coverage_pct": 0.0
+    }
+  },
+  "query_details": [
+    {
+      "query_id": "LQ-01",
+      "query": "What is the minimum CGPA required to avoid academic warning in undergraduate studies?",
+      "topic": "grading_warning",
+      "max_similarity": 0.9165,
+      "matched_golden_id": "g01",
+      "matched_golden_question": "What CGPA does an undergraduate need to stay off academic warning?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-02",
+      "query": "Can a student register for a new semester if placed on probation?",
+      "topic": "probation",
+      "max_similarity": 0.7661,
+      "matched_golden_id": "g15",
+      "matched_golden_question": "How is a student placed on academic probation after receiving consecutive warnings?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-03",
+      "query": "What is the passing grade for undergraduate degree programs at FAST?",
+      "topic": "grading",
+      "max_similarity": 0.7355,
+      "matched_golden_id": "g09",
+      "matched_golden_question": "What is the minimum passing grade required in a prerequisite course before registering for an advanced course?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-04",
+      "query": "What happens if a student fails the same course three times?",
+      "topic": "course_repeat",
+      "max_similarity": 0.7336,
+      "matched_golden_id": "g24",
+      "matched_golden_question": "If an undergraduate fails a prerequisite course and receives an academic warning in the same semester, what are the combined restrictions on their next enrollment?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-05",
+      "query": "What is the fee refund policy if I withdraw within the first week of classes?",
+      "topic": "fee_refund",
+      "max_similarity": 0.9576,
+      "matched_golden_id": "g27",
+      "matched_golden_question": "What is the fee refund policy and schedule if a student withdraws within the first week of classes?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-06",
+      "query": "What is the maximum credit hours allowed per regular semester?",
+      "topic": "course_load",
+      "max_similarity": 0.785,
+      "matched_golden_id": "g11",
+      "matched_golden_question": "How many credits can an undergraduate student enroll in during a regular semester without special permission?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-07",
+      "query": "Is attendance mandatory and what is the minimum percentage required?",
+      "topic": "attendance",
+      "max_similarity": 0.7972,
+      "matched_golden_id": "g02",
+      "matched_golden_question": "What attendance percentage does clause 1.21 of the academic rules require?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-08",
+      "query": "How is the SGPA and CGPA calculated on the official transcript?",
+      "topic": "grading",
+      "max_similarity": 0.6073,
+      "matched_golden_id": "g01",
+      "matched_golden_question": "What CGPA does an undergraduate need to stay off academic warning?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-09",
+      "query": "What is the penalty for academic dishonesty or cheating in exams?",
+      "topic": "discipline",
+      "max_similarity": 0.7773,
+      "matched_golden_id": "g12",
+      "matched_golden_question": "What penalty is applied if a student violates the university examination seating arrangement?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-10",
+      "query": "Can undergraduate students launch a startup under the faculty entrepreneurship policy?",
+      "topic": "entrepreneurship",
+      "max_similarity": 0.7698,
+      "matched_golden_id": "g08",
+      "matched_golden_question": "What equity percentage does the university retain under the Faculty Entrepreneurship policy for campus start-ups?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-11",
+      "query": "What is the deadline for dropping a course with a W grade?",
+      "topic": "course_drop",
+      "max_similarity": 0.9595,
+      "matched_golden_id": "g28",
+      "matched_golden_question": "What is the deadline and procedure for dropping a course with a W grade on the transcript?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-12",
+      "query": "How many repeat courses are permitted throughout the four-year degree?",
+      "topic": "course_repeat",
+      "max_similarity": 0.7537,
+      "matched_golden_id": "g04",
+      "matched_golden_question": "What is the maximum duration allowed to complete a 4-year BS degree program?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-13",
+      "query": "What is the required CGPA for graduation in BS Computer Science?",
+      "topic": "graduation",
+      "max_similarity": 0.6885,
+      "matched_golden_id": "g01",
+      "matched_golden_question": "What CGPA does an undergraduate need to stay off academic warning?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-14",
+      "query": "What are the rules regarding incomplete grade I removal?",
+      "topic": "grading",
+      "max_similarity": 0.8145,
+      "matched_golden_id": "g10",
+      "matched_golden_question": "What is the procedure for an incomplete grade 'I' to be converted to a regular grade?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-15",
+      "query": "What is the university policy on summer semester registration limits?",
+      "topic": "course_load",
+      "max_similarity": 0.6716,
+      "matched_golden_id": "g30",
+      "matched_golden_question": "What is the procedure and maximum duration for requesting a semester freeze or deferral?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-16",
+      "query": "Who approves course equivalence for transfer students from other universities?",
+      "topic": "admissions",
+      "max_similarity": 0.5939,
+      "matched_golden_id": "g09",
+      "matched_golden_question": "What is the minimum passing grade required in a prerequisite course before registering for an advanced course?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-17",
+      "query": "What is the minimum attendance required to appear in final exams?",
+      "topic": "attendance",
+      "max_similarity": 0.7078,
+      "matched_golden_id": "g16",
+      "matched_golden_question": "In the superseded 2023 undergraduate rules, what was the attendance warning threshold?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-18",
+      "query": "Are students on probation eligible for university merit scholarships?",
+      "topic": "scholarships",
+      "max_similarity": 0.6956,
+      "matched_golden_id": "g15",
+      "matched_golden_question": "How is a student placed on academic probation after receiving consecutive warnings?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-19",
+      "query": "What equity percentage does FAST retain in faculty technical start-ups?",
+      "topic": "entrepreneurship",
+      "max_similarity": 0.8518,
+      "matched_golden_id": "g08",
+      "matched_golden_question": "What equity percentage does the university retain under the Faculty Entrepreneurship policy for campus start-ups?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-20",
+      "query": "What is the procedure for appealing a semester grade?",
+      "topic": "grading_appeal",
+      "max_similarity": 0.9013,
+      "matched_golden_id": "g29",
+      "matched_golden_question": "What is the formal procedure and time limit for appealing a semester final course grade?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-21",
+      "query": "How many credit hours are required to complete a BS degree?",
+      "topic": "graduation",
+      "max_similarity": 0.756,
+      "matched_golden_id": "g04",
+      "matched_golden_question": "What is the maximum duration allowed to complete a 4-year BS degree program?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-22",
+      "query": "What happens if a student misses the midterm exam due to medical illness?",
+      "topic": "exam_policy",
+      "max_similarity": 0.6371,
+      "matched_golden_id": "g14",
+      "matched_golden_question": "What are the rules regarding degree completion time extension for medical reasons?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-23",
+      "query": "Can a student take an extra course beyond the regular credit limit?",
+      "topic": "course_load",
+      "max_similarity": 0.7075,
+      "matched_golden_id": "g11",
+      "matched_golden_question": "How many credits can an undergraduate student enroll in during a regular semester without special permission?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-24",
+      "query": "What is the procedure for semester freeze or deferral?",
+      "topic": "semester_freeze",
+      "max_similarity": 0.9252,
+      "matched_golden_id": "g30",
+      "matched_golden_question": "What is the procedure and maximum duration for requesting a semester freeze or deferral?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-25",
+      "query": "What is the tuition fee per credit hour for repeat courses?",
+      "topic": "fee_structure",
+      "max_similarity": 0.6842,
+      "matched_golden_id": "g06",
+      "matched_golden_question": "What is the tuition fee per semester for undergraduate BS CS in Fall 2026?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-26",
+      "query": "Is there a grace period for paying semester dues before fines apply?",
+      "topic": "fee_structure",
+      "max_similarity": 0.6282,
+      "matched_golden_id": "g30",
+      "matched_golden_question": "What is the procedure and maximum duration for requesting a semester freeze or deferral?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-27",
+      "query": "What is the maximum duration allowed to complete a 4-year degree program?",
+      "topic": "graduation",
+      "max_similarity": 0.9762,
+      "matched_golden_id": "g04",
+      "matched_golden_question": "What is the maximum duration allowed to complete a 4-year BS degree program?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-28",
+      "query": "What documents are required to obtain an official degree transcript?",
+      "topic": "transcript",
+      "max_similarity": 0.5731,
+      "matched_golden_id": "g09",
+      "matched_golden_question": "What is the minimum passing grade required in a prerequisite course before registering for an advanced course?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-29",
+      "query": "How do I connect to the university campus Wi-Fi network and authenticate?",
+      "topic": "campus_wifi",
+      "max_similarity": 0.7127,
+      "matched_golden_id": "g25",
+      "matched_golden_question": "Under the campus wireless network policy, what is the daily bandwidth quota for students and which SSID is used for 802.1X enterprise authentication?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-30",
+      "query": "What are the operating hours of the student gym and sports complex?",
+      "topic": "sports_complex",
+      "max_similarity": 0.9014,
+      "matched_golden_id": "g31",
+      "matched_golden_question": "What are the operating hours and rules for using the campus sports complex and gymnasium?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-31",
+      "query": "Where do I apply for a student car or motorbike parking sticker?",
+      "topic": "parking_regulations",
+      "max_similarity": 0.9563,
+      "matched_golden_id": "g32",
+      "matched_golden_question": "Where and how do students apply for vehicle parking registration stickers for cars and motorbikes?",
+      "is_covered": true
+    },
+    {
+      "query_id": "LQ-32",
+      "query": "What is the curfew time for male and female resident hostels?",
+      "topic": "hostel_curfew",
+      "max_similarity": 0.6105,
+      "matched_golden_id": "g31",
+      "matched_golden_question": "What are the operating hours and rules for using the campus sports complex and gymnasium?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-33",
+      "query": "Does the university cafeteria offer subsidized meal vouchers?",
+      "topic": "cafeteria",
+      "max_similarity": 0.7137,
+      "matched_golden_id": "g20",
+      "matched_golden_question": "What are the cafeteria meal subsidy allowances for day scholars?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-34",
+      "query": "Are there international student exchange programs with European universities?",
+      "topic": "exchange_program",
+      "max_similarity": 0.4958,
+      "matched_golden_id": "g26",
+      "matched_golden_question": "What is the maximum Turnitin similarity index permitted for undergraduate Final Year Projects (FYP) under the Digital Library repository policy?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-35",
+      "query": "Can students reserve badminton courts during exam preparation week?",
+      "topic": "sports_complex",
+      "max_similarity": 0.5752,
+      "matched_golden_id": "g12",
+      "matched_golden_question": "What penalty is applied if a student violates the university examination seating arrangement?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-36",
+      "query": "What is the procedure for borrowing books from the university library on weekends?",
+      "topic": "library",
+      "max_similarity": 0.593,
+      "matched_golden_id": "g30",
+      "matched_golden_question": "What is the procedure and maximum duration for requesting a semester freeze or deferral?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-37",
+      "query": "When is the annual campus blood donation drive held?",
+      "topic": "campus_life",
+      "max_similarity": 0.5572,
+      "matched_golden_id": "g31",
+      "matched_golden_question": "What are the operating hours and rules for using the campus sports complex and gymnasium?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-38",
+      "query": "What is the guest policy for outside visitors in student hostels?",
+      "topic": "hostel_curfew",
+      "max_similarity": 0.6601,
+      "matched_golden_id": "g16",
+      "matched_golden_question": "In the superseded 2023 undergraduate rules, what was the attendance warning threshold?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-39",
+      "query": "How do I reset my student email password through the IT helpdesk?",
+      "topic": "it_support",
+      "max_similarity": 0.5456,
+      "matched_golden_id": "g25",
+      "matched_golden_question": "Under the campus wireless network policy, what is the daily bandwidth quota for students and which SSID is used for 802.1X enterprise authentication?",
+      "is_covered": false
+    },
+    {
+      "query_id": "LQ-40",
+      "query": "What are the swimming pool timings for female students?",
+      "topic": "sports_complex",
+      "max_similarity": 0.7592,
+      "matched_golden_id": "g21",
+      "matched_golden_question": "What is the campus swimming pool depth and water filtration schedule?",
+      "is_covered": true
+    }
+  ],
+  "min_coverage_share": 0.85,
+  "gate_passed": false
+}

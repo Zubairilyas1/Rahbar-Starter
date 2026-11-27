@@ -25,6 +25,9 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# PDF text contains ligatures/symbols; never crash on a cp1252 console or pipe.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from trace_io import DEFAULT_TRACE_PATH, find_trace, load_traces  # noqa: E402
 
 

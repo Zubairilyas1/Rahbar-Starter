@@ -28,7 +28,7 @@ public class W {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
 }
 "@
-if ($Wrap -le 0) { $Wrap = if ($FontPx -le 10) { 180 } elseif ($FontPx -le 11) { 165 } else { 150 } }
+if ($Wrap -le 0) { $Wrap = if ($FontPx -le 10) { 160 } elseif ($FontPx -le 11) { 148 } else { 135 } }
 $done = Join-Path $env:TEMP ("shot_done_" + [guid]::NewGuid().ToString("N"))
 $title = "Windows PowerShell"
 $tag = [guid]::NewGuid().ToString("N").Substring(0, 8)
@@ -45,16 +45,17 @@ Start-Sleep -Milliseconds 1200
 `$c = if ($Cols -gt 0) { [Math]::Min($Cols, `$max.Width - 1) } else { `$max.Width - 1 }
 try { `$host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(40, 20) } catch {}
 try { `$host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(`$c, 3000) } catch {}
-foreach (`$rows in ([int](860 / ($FontPx + 2)))..20) { try { `$host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(`$c, `$rows); break } catch {} }
+foreach (`$rows in ([int](700 / ($FontPx + 2.5)))..20) { try { `$host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(`$c, `$rows); break } catch {} }
 `$ww = `$host.UI.RawUI.WindowSize.Width
 try { `$host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(`$ww, 3000) } catch {}
 Set-Location '$WorkDir'
 Clear-Host
-Write-Host ('PS ' + (Get-Location).Path + '> ') -NoNewline
-Write-Host @'
+`$cmdText = @'
 $Command
 '@
-& { $Command } 2>&1 | Out-String -Stream -Width 4096 | ForEach-Object { `$l = [string]`$_; if (`$l.Length -eq 0) { '' } else { for (`$i = 0; `$i -lt `$l.Length; `$i += $Wrap) { `$l.Substring(`$i, [Math]::Min($Wrap, `$l.Length - `$i)) } } } | Out-Host
+`$echo = 'PS ' + (Get-Location).Path + '> ' + `$cmdText.Trim()
+for (`$i = 0; `$i -lt `$echo.Length; `$i += $Wrap) { Write-Host `$echo.Substring(`$i, [Math]::Min($Wrap, `$echo.Length - `$i)) }
+& { $Command } 2>&1 | ForEach-Object { if (`$_ -is [System.Management.Automation.ErrorRecord]) { `$_.Exception.Message } else { `$_ } } | Out-String -Stream -Width 4096 | ForEach-Object { `$l = [string]`$_; if (`$l.Length -eq 0) { '' } else { for (`$i = 0; `$i -lt `$l.Length; `$i += $Wrap) { `$l.Substring(`$i, [Math]::Min($Wrap, `$l.Length - `$i)) } } } | Out-Host
 Write-Host ('PS ' + (Get-Location).Path + '> ') -NoNewline
 (`$host.UI.RawUI.CursorPosition.Y + 1).ToString() + ' ' + `$host.UI.RawUI.WindowSize.Height | Set-Content '$done'
 "@

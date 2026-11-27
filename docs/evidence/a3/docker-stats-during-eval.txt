@@ -1,0 +1,10 @@
+# docker stats --no-stream, 2026-11-27T15:04:37Z, baseline eval Job running (Part B suite against svc/api)
+POD (container)	CPU%	MEM
+rahbar-eval-baseline-rtvm4 (evaluator)	0.00%	27.55MiB / 256MiB
+redis-cc8b8f9-f7b7f (redis)	2.16%	9.68MiB / 256MiB
+ui-946999698-rrd2p (ui)	0.41%	2.445MiB / 128MiB
+ui-946999698-xlrqz (ui)	0.02%	5.105MiB / 128MiB
+api-79bc89c9b6-fjpkj (api)	0.27%	69.25MiB / 512MiB
+api-79bc89c9b6-bsdpn (api)	2.02%	72.05MiB / 512MiB
+api-79bc89c9b6-rwsqh (api)	0.30%	113.4MiB / 512MiB
+chroma-0 (chroma)	1.05%	82.34MiB / 1GiB

@@ -1,0 +1,60 @@
+{
+  "timestamp": "2026-11-27T18:18:44Z",
+  "decision": "RELEASE",
+  "passed": true,
+  "thresholds": {
+    "max_recall5_drop": 0.02,
+    "min_faithfulness": 0.8,
+    "min_abstention_delta": 0.0,
+    "min_citation_validity": 0.95,
+    "max_latency_p95_s": 90.0
+  },
+  "threshold_source": {
+    "max_recall5_drop": "env GATE_MAX_RECALL5_DROP",
+    "min_faithfulness": "env GATE_MIN_FAITHFULNESS",
+    "min_abstention_delta": "env GATE_MIN_ABSTENTION_DELTA",
+    "min_citation_validity": "env GATE_MIN_CITATION_VALIDITY",
+    "max_latency_p95_s": "env GATE_MAX_LATENCY_P95_S"
+  },
+  "checks": [
+    {
+      "check": "recall@5 drop",
+      "rule": "candidate >= baseline - 0.02",
+      "baseline": 0.9231,
+      "candidate": 0.9231,
+      "passed": true
+    },
+    {
+      "check": "faithfulness",
+      "rule": ">= 0.80",
+      "baseline": 1.0,
+      "candidate": 1.0,
+      "passed": true
+    },
+    {
+      "check": "abstention correctness",
+      "rule": ">= baseline + 0.00",
+      "baseline": 1.0,
+      "candidate": 1.0,
+      "passed": true
+    },
+    {
+      "check": "citation validity",
+      "rule": ">= 0.95",
+      "baseline": 1.0,
+      "candidate": 1.0,
+      "passed": true
+    },
+    {
+      "check": "latency p95 (s)",
+      "rule": "<= 90.0",
+      "baseline": 54.75,
+      "candidate": 55.194,
+      "passed": true
+    }
+  ],
+  "baseline": "/results/latest_baseline.json",
+  "candidate": "/results/latest_candidate.json",
+  "candidate_label": "candidate",
+  "candidate_collection": "rahbar_c600"
+}

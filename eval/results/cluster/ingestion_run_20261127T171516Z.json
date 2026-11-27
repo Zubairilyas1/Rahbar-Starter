@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-11-27T17:15:17Z",
+  "collection": "rahbar",
+  "embed_model": "nomic-embed-text",
+  "chunk_size": 400,
+  "chunk_overlap": 50,
+  "seeded": 0,
+  "received": 11,
+  "new": [
+    "doc01-campus-wifi-policy-2026.md",
+    "doc02-library-digital-resources-2026.md",
+    "doc03-sports-complex-regulations-2026.md",
+    "doc04-campus-wifi-policy-duplicate.md",
+    "doc05-sports-complex-duplicate.md",
+    "doc06-campus-wifi-policy-draft-neardup.md",
+    "doc07-hostel-allotment-corrupted.md",
+    "doc08-unlabeled-cafeteria-guidelines.md",
+    "doc09-campus-wifi-policy-2024-outdated.md",
+    "doc10-student-portal-guidelines-injected.md",
+    "doc11-faculty-entrepreneurship-and-technical-start-ups-policy-2026.md"
+  ],
+  "modified": [],
+  "unchanged": 9,
+  "deleted": [],
+  "purged_chunks": {},
+  "quarantined": [
+    "doc04-campus-wifi-policy-duplicate.md",
+    "doc05-sports-complex-duplicate.md",
+    "doc06-campus-wifi-policy-draft-neardup.md",
+    "doc07-hostel-allotment-corrupted.md",
+    "doc08-unlabeled-cafeteria-guidelines.md",
+    "doc09-campus-wifi-policy-2024-outdated.md"
+  ],
+  "archived": [
+    {
+      "document": "faculty-entrepreneurship-and-technical-start-ups-policy.pdf",
+      "superseded_by": "doc11-faculty-entrepreneurship-and-technical-start-ups-policy-2026.md"
+    }
+  ],
+  "embedded_chunks": 22,
+  "verification_report": "/results/verification_report_20261127T171516Z.json",
+  "chunks_by_document": {
+    "undergraduate-academic-rules-aug-2023.pdf": 281,
+    "academic-rules-handbook-jun-2026.pdf": 106,
+    "prospectus-2026-academic-rules-and-regulations.pdf": 14,
+    "student-handbook-jun-2026.pdf": 152,
+    "annual-report-2019-20.pdf": 120,
+    "annual-report-2023-24.pdf": 387,
+    "fee-structure-page.html": 34,
+    "grading-page.html": 35,
+    "faculty-entrepreneurship-and-technical-start-ups-policy.pdf": 117,
+    "doc01-campus-wifi-policy-2026.md": 4,
+    "doc02-library-digital-resources-2026.md": 4,
+    "doc03-sports-complex-regulations-2026.md": 4,
+    "doc10-student-portal-guidelines-injected.md": 4,
+    "doc11-faculty-entrepreneurship-and-technical-start-ups-policy-2026.md": 6
+  }
+}

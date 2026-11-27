@@ -2,7 +2,10 @@
 
 Save each terminal screenshot here under the exact file name below (PNG). It must show
 the command and its full output, uncropped, from our own cluster. `scripts/build_report.py`
-embeds them, labelled, in the appendix and reports any that are missing.
+embeds them, labelled, in the appendix and reports any that are missing. Outputs taller than
+one screen are captured as consecutive parts (`-1`, `-2`, `-3`), each showing the command with
+`Select-Object -First/-Skip`, so together they show the whole output. Captured with
+`scripts/capture_terminal.ps1` (a real console window grabbed from the screen).
 
 | Label | File | What it must show | Command (see k8s/README.md) |
 |---|---|---|---|
