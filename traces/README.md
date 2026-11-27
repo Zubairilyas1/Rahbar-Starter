@@ -1,7 +1,7 @@
 # Trace samples (Assignment 03 D/F4)
 
 `cluster/` holds the trace files copied from the `rahbar-traces` volume: one JSON-lines
-file per API pod. Copy them with `kubectl cp rahbar/<toolbox-pod>:/traces traces/cluster`.
+file per API pod. Copy them with `python scripts/cluster_files.py export`.
 The same records also go to the pods' stdout (`kubectl logs deploy/api -n rahbar`).
 
 Tools: `inspect.py` (D2: exact context and prompt for a trace id), `metrics_summary.py`

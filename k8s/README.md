@@ -10,7 +10,7 @@ k8s/
     namespace, serviceaccounts, configmap (rahbar-config), gate-configmap (rahbar-gate),
     storage (PVCs: rahbar-datalake, rahbar-results, rahbar-traces),
     chroma-statefulset (+ its own PVC), redis-deployment, services, ingress,
-    networkpolicy, api-deployment, hpa, ui-deployment, indexer-job, reindex-cronjob, toolbox
+    networkpolicy, api-deployment, hpa, ui-deployment, indexer-job, reindex-cronjob
   eval-job.yaml             Part B suite + release gate against the candidate (F2)
   jobs/                     on-demand Jobs: baseline eval, gate-only, Batch B, rollback, chunk counts
   release/                  candidate collections + api-candidate Deployments + promotion patches (F3)
@@ -63,7 +63,8 @@ minikube image load rahbar-eval:dev
 ## 2. Apply
 
 ```
-kubectl apply -k k8s/overlays/dev
+kubectl apply -k k8s/overlays/dev                 # minikube
+kubectl apply -k k8s/overlays/docker-desktop      # Docker Desktop Kubernetes (our runs)
 kubectl create secret generic rahbar-secret -n rahbar --from-literal=LLM_API_KEY=local-placeholder
 kubectl wait --for=condition=complete job/rahbar-indexer -n rahbar --timeout=30m
 kubectl rollout status deployment/api -n rahbar
@@ -71,13 +72,12 @@ kubectl get all,pvc,configmap,cronjob,job -n rahbar          # screenshot F
 ```
 
 The first indexer run seeds `/datalake/corpus` from the image, verifies all
-documents and builds collection `rahbar` (chunk 400 / overlap 50). Toolbox pod:
+documents and builds collection `rahbar` (chunk 400 / overlap 50).
 
-```
-kubectl get pod -n rahbar -l app=ragops-toolbox -o jsonpath="{.items[0].metadata.name}"
-```
-
-Below, `TOOLBOX` stands for that name.
+Files on the volumes are read and changed with `scripts/cluster_files.py`, which runs
+short-lived Jobs that mount the volumes (`sh`, `put`, `export`). It doesn't use
+`kubectl exec`/`cp`, which fail on Docker Desktop's Kubernetes with
+"server gave HTTP response to HTTPS client".
 
 ## 3. Part A: verify and update
 
@@ -87,16 +87,16 @@ kubectl create job --from=cronjob/reindex rerun-unchanged -n rahbar
 kubectl logs -f job/rerun-unchanged -n rahbar                       # "embedded_chunks": 0   (screenshot A)
 kubectl apply -f k8s/jobs/ingest-batch-b-job.yaml
 kubectl logs -f job/rahbar-ingest-batch-b -n rahbar                 # Batch B report: P/F per check (screenshot A)
-kubectl exec -n rahbar deploy/ragops-toolbox -- ls /datalake/quarantine /datalake/archive
+python scripts/cluster_files.py sh "ls -la /datalake/quarantine /datalake/archive"
 ```
 
 Changed document, deleted document (orphan proof), rollback:
 
 ```
-kubectl exec -n rahbar deploy/ragops-toolbox -- sh -c "echo 'Updated: help desk extension 100.' >> /datalake/corpus/doc02-library-digital-resources-2026.md"
+python scripts/cluster_files.py sh "echo 'Updated: help desk extension 100.' >> /datalake/corpus/doc02-library-digital-resources-2026.md"
 kubectl create job --from=cronjob/reindex rerun-modified -n rahbar
 kubectl logs -f job/rerun-modified -n rahbar                        # only doc02 purged + re-embedded
-kubectl exec -n rahbar deploy/ragops-toolbox -- rm /datalake/corpus/doc03-sports-complex-regulations-2026.md
+python scripts/cluster_files.py sh "rm /datalake/corpus/doc03-sports-complex-regulations-2026.md"
 kubectl create job --from=cronjob/reindex rerun-deleted -n rahbar
 kubectl logs -f job/rerun-deleted -n rahbar                         # purged, orphans 0, chunk counts per document
 kubectl apply -f k8s/jobs/rollback-doc-job.yaml
@@ -106,7 +106,7 @@ kubectl logs -f job/rahbar-rollback -n rahbar                       # 2022 polic
 Unseen batch at the demo:
 
 ```
-kubectl cp ./unseen-batch/. rahbar/TOOLBOX:/datalake/incoming/
+python scripts/cluster_files.py put ./unseen-batch /datalake/incoming
 kubectl create job --from=cronjob/reindex ingest-unseen -n rahbar
 kubectl logs -f job/ingest-unseen -n rahbar
 ```
@@ -169,8 +169,7 @@ kubectl patch configmap rahbar-gate -n rahbar --patch-file k8s/jobs/gate-default
 kubectl logs deploy/api -n rahbar | grep record_type                # traces on stdout
 kubectl port-forward svc/api 8000:8000 -n rahbar                    # then: curl localhost:8000/metrics
 kubectl top pods -n rahbar --containers                             # while the eval / indexer Jobs run
-kubectl cp rahbar/TOOLBOX:/results eval/results/cluster
-kubectl cp rahbar/TOOLBOX:/traces traces/cluster
+python scripts/cluster_files.py export                          # /results, /traces -> repo
 python traces/inspect.py <trace_id> --path traces/cluster           # D2 (screenshot D)
 python traces/metrics_summary.py --path traces/cluster --exclude-eval
 python traces/diagnose.py <trace_id> --path traces/cluster          # D5

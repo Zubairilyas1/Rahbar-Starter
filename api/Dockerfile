@@ -4,7 +4,7 @@
 FROM python:3.12-slim
 
 # Patch OS packages with known fixed CVEs in the base image (Trivy gate in ci.yml).
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+RUN apt-get -o Acquire::Retries=8 update && apt-get -o Acquire::Retries=8 upgrade -y && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r rahbar --gid=1000 \
     && useradd -r -g rahbar --uid=1000 --home-dir=/app --shell=/sbin/nologin rahbar
@@ -12,7 +12,7 @@ RUN groupadd -r rahbar --gid=1000 \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
 
 COPY app/ /app/app/
 

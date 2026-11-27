@@ -24,7 +24,9 @@ data:
   TEMPERATURE: "0.2"
   LLM_SEED: "42"
   LLM_MODEL: "llama3.2:3b"
-  LLM_TIMEOUT: "30.0"
+  # CPU-only Ollama (llama3.2:3b) on the demo laptop: a 2k-token prompt can take
+  # over 30 s; 90 s avoids timeouts being counted as abstentions.
+  LLM_TIMEOUT: "90.0"
   OLLAMA_URL: "http://host.minikube.internal:11434"
   HOSTED_BASE_URL: ""
   REDIS_URL: "redis://redis:6379"

@@ -87,6 +87,4 @@ ragops-eval: ## Assignment 03: run the Part B suite + gate as a Kubernetes Job a
 	kubectl logs job/rahbar-eval -n $(NS)
 
 ragops-results: ## Assignment 03: copy result files and traces off the cluster volumes into the repo
-	$(eval POD := $(shell kubectl get pod -n $(NS) -l app=ragops-toolbox -o jsonpath='{.items[0].metadata.name}'))
-	kubectl cp $(NS)/$(POD):/results eval/results/cluster
-	kubectl cp $(NS)/$(POD):/traces traces/cluster
+	$(PY) scripts/cluster_files.py export

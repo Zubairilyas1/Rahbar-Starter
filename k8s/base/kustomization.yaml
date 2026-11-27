@@ -20,4 +20,3 @@ resources:
   - api-deployment.yaml
   - hpa.yaml
   - reindex-cronjob.yaml
-  - toolbox.yaml

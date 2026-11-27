@@ -8,7 +8,7 @@
 #
 # Assignment 03 additions: the candidate API (app=api-candidate) gets exactly the
 # api's paths, and the eval Job (app=eval-job) may call both APIs and Ollama (judge).
-# The ragops-toolbox pod has no allow rule at all (it only mounts volumes).
+# Pods started by scripts/cluster_files.py (app=ragops-files) get no allow rule: they only mount volumes.
 
 # 1. Deny all ingress and egress by default for every pod in the namespace.
 apiVersion: networking.k8s.io/v1

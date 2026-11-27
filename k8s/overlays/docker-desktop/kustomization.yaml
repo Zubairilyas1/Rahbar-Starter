@@ -1,0 +1,13 @@
+# Docker Desktop's built-in Kubernetes (the cluster used for our runs): the same
+# base, with Ollama reached at host.docker.internal instead of minikube's
+# host.minikube.internal. Docker Desktop has no Calico, so the NetworkPolicies are
+# accepted but not enforced there; on minikube --cni=calico they are enforced.
+#   kubectl apply -k k8s/overlays/docker-desktop
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - target: {kind: ConfigMap, name: rahbar-config}
+    patch: |-
+      - {op: replace, path: /data/OLLAMA_URL, value: "http://host.docker.internal:11434"}

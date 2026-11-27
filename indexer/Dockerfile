@@ -15,9 +15,9 @@ FROM python:3.12-slim
 # System packages for OCR (pytesseract + pdf2image need the actual binaries, not just
 # the Python wheels): pytesseract shells out to `tesseract`; pdf2image shells out to
 # poppler's `pdftoppm`.
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends tesseract-ocr poppler-utils \
+RUN apt-get -o Acquire::Retries=8 update \
+    && apt-get -o Acquire::Retries=8 upgrade -y \
+    && apt-get -o Acquire::Retries=8 install -y --no-install-recommends tesseract-ocr poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r rahbar --gid=1000 \
@@ -26,7 +26,7 @@ RUN groupadd -r rahbar --gid=1000 \
 WORKDIR /app
 
 COPY indexer/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
 
 COPY indexer/pipeline/ /app/pipeline/
 
