@@ -1,0 +1,40 @@
+{"query_id": "LQ-01", "query": "What is the minimum CGPA required to avoid academic warning in undergraduate studies?", "topic": "grading_warning", "source": "student_portal"}
+{"query_id": "LQ-02", "query": "Can a student register for a new semester if placed on probation?", "topic": "probation", "source": "student_portal"}
+{"query_id": "LQ-03", "query": "What is the passing grade for undergraduate degree programs at FAST?", "topic": "grading", "source": "student_portal"}
+{"query_id": "LQ-04", "query": "What happens if a student fails the same course three times?", "topic": "course_repeat", "source": "student_portal"}
+{"query_id": "LQ-05", "query": "What is the fee refund policy if I withdraw within the first week of classes?", "topic": "fee_refund", "source": "student_portal"}
+{"query_id": "LQ-06", "query": "What is the maximum credit hours allowed per regular semester?", "topic": "course_load", "source": "student_portal"}
+{"query_id": "LQ-07", "query": "Is attendance mandatory and what is the minimum percentage required?", "topic": "attendance", "source": "student_portal"}
+{"query_id": "LQ-08", "query": "How is the SGPA and CGPA calculated on the official transcript?", "topic": "grading", "source": "student_portal"}
+{"query_id": "LQ-09", "query": "What is the penalty for academic dishonesty or cheating in exams?", "topic": "discipline", "source": "student_portal"}
+{"query_id": "LQ-10", "query": "Can undergraduate students launch a startup under the faculty entrepreneurship policy?", "topic": "entrepreneurship", "source": "student_portal"}
+{"query_id": "LQ-11", "query": "What is the deadline for dropping a course with a W grade?", "topic": "course_drop", "source": "student_portal"}
+{"query_id": "LQ-12", "query": "How many repeat courses are permitted throughout the four-year degree?", "topic": "course_repeat", "source": "student_portal"}
+{"query_id": "LQ-13", "query": "What is the required CGPA for graduation in BS Computer Science?", "topic": "graduation", "source": "student_portal"}
+{"query_id": "LQ-14", "query": "What are the rules regarding incomplete grade I removal?", "topic": "grading", "source": "student_portal"}
+{"query_id": "LQ-15", "query": "What is the university policy on summer semester registration limits?", "topic": "course_load", "source": "student_portal"}
+{"query_id": "LQ-16", "query": "Who approves course equivalence for transfer students from other universities?", "topic": "admissions", "source": "student_portal"}
+{"query_id": "LQ-17", "query": "What is the minimum attendance required to appear in final exams?", "topic": "attendance", "source": "student_portal"}
+{"query_id": "LQ-18", "query": "Are students on probation eligible for university merit scholarships?", "topic": "scholarships", "source": "student_portal"}
+{"query_id": "LQ-19", "query": "What equity percentage does FAST retain in faculty technical start-ups?", "topic": "entrepreneurship", "source": "student_portal"}
+{"query_id": "LQ-20", "query": "What is the procedure for appealing a semester grade?", "topic": "grading_appeal", "source": "student_portal"}
+{"query_id": "LQ-21", "query": "How many credit hours are required to complete a BS degree?", "topic": "graduation", "source": "student_portal"}
+{"query_id": "LQ-22", "query": "What happens if a student misses the midterm exam due to medical illness?", "topic": "exam_policy", "source": "student_portal"}
+{"query_id": "LQ-23", "query": "Can a student take an extra course beyond the regular credit limit?", "topic": "course_load", "source": "student_portal"}
+{"query_id": "LQ-24", "query": "What is the procedure for semester freeze or deferral?", "topic": "semester_freeze", "source": "student_portal"}
+{"query_id": "LQ-25", "query": "What is the tuition fee per credit hour for repeat courses?", "topic": "fee_structure", "source": "student_portal"}
+{"query_id": "LQ-26", "query": "Is there a grace period for paying semester dues before fines apply?", "topic": "fee_structure", "source": "student_portal"}
+{"query_id": "LQ-27", "query": "What is the maximum duration allowed to complete a 4-year degree program?", "topic": "graduation", "source": "student_portal"}
+{"query_id": "LQ-28", "query": "What documents are required to obtain an official degree transcript?", "topic": "transcript", "source": "student_portal"}
+{"query_id": "LQ-29", "query": "How do I connect to the university campus Wi-Fi network and authenticate?", "topic": "campus_wifi", "source": "live_chat"}
+{"query_id": "LQ-30", "query": "What are the operating hours of the student gym and sports complex?", "topic": "sports_complex", "source": "live_chat"}
+{"query_id": "LQ-31", "query": "Where do I apply for a student car or motorbike parking sticker?", "topic": "parking_regulations", "source": "live_chat"}
+{"query_id": "LQ-32", "query": "What is the curfew time for male and female resident hostels?", "topic": "hostel_curfew", "source": "live_chat"}
+{"query_id": "LQ-33", "query": "Does the university cafeteria offer subsidized meal vouchers?", "topic": "cafeteria", "source": "live_chat"}
+{"query_id": "LQ-34", "query": "Are there international student exchange programs with European universities?", "topic": "exchange_program", "source": "live_chat"}
+{"query_id": "LQ-35", "query": "Can students reserve badminton courts during exam preparation week?", "topic": "sports_complex", "source": "live_chat"}
+{"query_id": "LQ-36", "query": "What is the procedure for borrowing books from the university library on weekends?", "topic": "library", "source": "live_chat"}
+{"query_id": "LQ-37", "query": "When is the annual campus blood donation drive held?", "topic": "campus_life", "source": "live_chat"}
+{"query_id": "LQ-38", "query": "What is the guest policy for outside visitors in student hostels?", "topic": "hostel_curfew", "source": "live_chat"}
+{"query_id": "LQ-39", "query": "How do I reset my student email password through the IT helpdesk?", "topic": "it_support", "source": "live_chat"}
+{"query_id": "LQ-40", "query": "What are the swimming pool timings for female students?", "topic": "sports_complex", "source": "live_chat"}
