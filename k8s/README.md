@@ -46,6 +46,26 @@ Docker Desktop's Kubernetes also works (no Calico, so the NetworkPolicies are ac
 but not enforced). There, set `OLLAMA_URL` in `base/configmap.yaml` to
 `http://host.docker.internal:11434`.
 
+**Our runs (the numbers in the report):** Docker Desktop Kubernetes v1.36 with Ollama in
+Docker on **CPU only**:
+
+```
+docker run -d --name rahbar-ollama -p 11434:11434 -v no1_ollama_data:/root/.ollama -e OLLAMA_HOST=0.0.0.0 ollama/ollama:latest
+kubectl apply -k k8s/overlays/docker-desktop
+```
+
+**For a faster live demo**, run Ollama on the NVIDIA GPU (T1200, 4 GB: about 90% of
+llama3.2:3b fits, answers drop from 26–50 s to 10–20 s). The cluster side does not change:
+
+```
+docker rm -f rahbar-ollama
+docker run -d --gpus all --name rahbar-ollama -p 11434:11434 -v no1_ollama_data:/root/.ollama -e OLLAMA_HOST=0.0.0.0 ollama/ollama:latest
+docker exec rahbar-ollama ollama ps        # PROCESSOR column shows the CPU/GPU split
+```
+
+GPU latencies are not comparable with the CPU numbers in the report. Re-measure the
+baseline before gating a candidate on a different machine.
+
 ## 1. Images
 
 ```
