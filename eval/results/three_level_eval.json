@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-11-23T09:07:59Z",
+  "module_level": {
+    "mean_paraphrase_similarity": 0.7957,
+    "mean_unrelated_similarity": 0.3963,
+    "separation_gap": 0.3994,
+    "embedding_time_ms": 78.2,
+    "determinism_max_diff": 0.0
+  },
+  "component_level": {
+    "recall_at_3": 0.9524,
+    "recall_at_5": 0.9524,
+    "mrr": 0.9524,
+    "ndcg_at_5": 0.9524,
+    "noise_recall_at_5": 0.7619,
+    "noise_degradation_pct": 20.0
+  },
+  "end_to_end_level": {
+    "faithfulness": 0.6154,
+    "judge_human_agreement_pct": 75.0,
+    "abstention_correctness_pct": 100.0,
+    "citation_validity_pct": 100.0,
+    "latency_p50_s": 3.081,
+    "latency_p95_s": 22.046
+  },
+  "stochasticity": {
+    "run1_gap": 0.3994,
+    "run2_gap": 0.3994,
+    "max_metric_delta": 53.9
+  },
+  "total_runtime_seconds": 693.54
+}
