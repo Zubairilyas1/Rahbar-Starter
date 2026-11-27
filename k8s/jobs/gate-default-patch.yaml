@@ -1,0 +1,4 @@
+# Restores the default thresholds of k8s/base/gate-configmap.yaml.
+#   kubectl patch configmap rahbar-gate -n rahbar --patch-file k8s/jobs/gate-default-patch.yaml
+data:
+  GATE_MIN_FAITHFULNESS: "0.80"

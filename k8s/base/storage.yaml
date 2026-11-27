@@ -1,0 +1,45 @@
+# Persistent storage for the RAGOps layer (Assignment 03 F1). Everything here
+# survives pod restarts and Job completion.
+#
+#   rahbar-datalake : the data lake -- corpus/, incoming/, quarantine/, archive/,
+#                     state/<collection>/ -- written only by the indexer Jobs.
+#   rahbar-results  : verification reports, ingestion run summaries, evaluation
+#                     result files and gate records (eval Job + indexer Jobs).
+#   rahbar-traces   : one JSON-lines trace file per API pod, read by the report
+#                     scripts (traces/inspect.py, traces/metrics_summary.py).
+#
+# Chroma's own data lives on the StatefulSet's volumeClaimTemplate (chroma-statefulset.yaml).
+# ReadWriteOnce is enough on a single-node minikube/docker-desktop cluster: every
+# pod that mounts these runs on the same node.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rahbar-datalake
+  namespace: rahbar
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rahbar-results
+  namespace: rahbar
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rahbar-traces
+  namespace: rahbar
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,64 @@
+# Builds the GOOD (chunk 600 / overlap 100) candidate collection (Part C1 / F3). Run before deploying
+# the matching api-candidate:
+#   kubectl delete job index-candidate-c600 -n rahbar --ignore-not-found
+#   kubectl apply -f k8s/release/index-candidate-c600.yaml && kubectl logs -f job/index-candidate-c600 -n rahbar
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: index-candidate-c600
+  namespace: rahbar
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: rahbar-indexer}
+    spec:
+      serviceAccountName: rahbar-indexer
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: indexer
+          image: rahbar-indexer:dev   # overlays pin this to a real tag/SHA
+          imagePullPolicy: IfNotPresent
+          envFrom: [{configMapRef: {name: rahbar-config}}]
+          env:
+            # The candidate's own collection and chunking (Part C1: chunk size/overlap).
+            # Same data lake, separate ingestion state (state/<collection>/), and it
+            # never consumes incoming/ -- that belongs to the live ingestion Job.
+            - {name: CHROMA_COLLECTION, value: "rahbar_c600"}
+            - {name: COLLECTION_VERSION, value: "c600-o100"}
+            - {name: CHUNK_SIZE, value: "600"}
+            - {name: CHUNK_OVERLAP, value: "100"}
+            - {name: INCOMING_DIR, value: "/tmp/no-incoming"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: datalake, mountPath: /datalake}
+            - {name: results, mountPath: /results}
+          # F5: sized from the measured peak of a full first ingestion (OCR + embedding
+          # batches); see docs/evidence/a3/kubectl-top-indexer.txt.
+          resources:
+            requests:
+              cpu: 200m
+              memory: 320Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - name: datalake
+          persistentVolumeClaim: {claimName: rahbar-datalake}
+        - name: results
+          persistentVolumeClaim: {claimName: rahbar-results}

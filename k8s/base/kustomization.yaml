@@ -2,10 +2,14 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 # secret.placeholder.yaml is deliberately NOT listed here -- applying it would
 # overwrite the real Secret created with `kubectl create secret`.
+# On-demand Jobs (k8s/eval-job.yaml, k8s/jobs/*, k8s/release/*) are not listed
+# either: they run when you apply them, not on every `kubectl apply -k`.
 resources:
   - namespace.yaml
   - serviceaccounts.yaml
   - configmap.yaml
+  - gate-configmap.yaml
+  - storage.yaml
   - chroma-statefulset.yaml
   - redis-deployment.yaml
   - services.yaml
@@ -16,5 +20,4 @@ resources:
   - api-deployment.yaml
   - hpa.yaml
   - reindex-cronjob.yaml
-  - corpus-pvc.yaml
-  - eval-job.yaml
+  - toolbox.yaml

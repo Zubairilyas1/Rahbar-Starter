@@ -13,7 +13,7 @@ INGRESS_IP ?= $(shell minikube ip 2>/dev/null)
 HOST ?= rahbar.local
 
 .DEFAULT_GOAL := help
-.PHONY: help install test lint dev cluster images apply secret index ask fetch eval eval-fixtures check
+.PHONY: help install test lint dev cluster images apply secret index ask fetch eval eval-fixtures check ragops-eval ragops-results
 
 help: ## list the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-14s %s\n", $$1, $$2}'
@@ -45,9 +45,11 @@ images: ## build the three images and load them into minikube
 	mkdir -p corpus/raw
 	docker build -f indexer/Dockerfile -t rahbar-indexer:$(TAG) .
 	docker build -t rahbar-ui:$(TAG) ui
+	docker build -f eval/Dockerfile -t rahbar-eval:$(TAG) .
 	minikube image load rahbar-api:$(TAG)
 	minikube image load rahbar-indexer:$(TAG)
 	minikube image load rahbar-ui:$(TAG)
+	minikube image load rahbar-eval:$(TAG)
 
 apply: ## apply the dev overlay (needs yours: manifests)
 	kubectl apply -k k8s/overlays/dev
@@ -77,3 +79,14 @@ eval-fixtures: ## score the CI fixture golden set against a local `make dev`
 
 check: ## run the submission checker
 	$(PY) scripts/check_submission.py
+
+ragops-eval: ## Assignment 03: run the Part B suite + gate as a Kubernetes Job against api-candidate
+	kubectl delete job rahbar-eval -n $(NS) --ignore-not-found
+	kubectl apply -f k8s/eval-job.yaml
+	kubectl wait --for=condition=complete --timeout=90m job/rahbar-eval -n $(NS) || true
+	kubectl logs job/rahbar-eval -n $(NS)
+
+ragops-results: ## Assignment 03: copy result files and traces off the cluster volumes into the repo
+	$(eval POD := $(shell kubectl get pod -n $(NS) -l app=ragops-toolbox -o jsonpath='{.items[0].metadata.name}'))
+	kubectl cp $(NS)/$(POD):/results eval/results/cluster
+	kubectl cp $(NS)/$(POD):/traces traces/cluster

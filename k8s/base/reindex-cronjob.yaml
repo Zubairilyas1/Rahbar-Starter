@@ -1,19 +1,23 @@
-# Weekly, same image and arguments as the indexer Job (ADR 0003). `make index`
-# (and the README) create a one-off Job from this template with
-# `kubectl create job --from=cronjob/reindex ...` -- so this object must be named
-# `reindex`, not `rahbar-indexer`.
+# Scheduled re-run of ingestion with verification (Assignment 03 F2, ADR 0003).
+# Same image, ConfigMap and volumes as the indexer Job, so a scheduled run picks up
+# whatever batch has been dropped into /datalake/incoming and, on an unchanged
+# corpus, embeds zero chunks. `make index` and the README create a one-off Job from
+# this template with `kubectl create job --from=cronjob/reindex ...`.
+# concurrencyPolicy: Forbid keeps the single-writer rule even if a run overruns.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: reindex
   namespace: rahbar
 spec:
-  schedule: "0 3 * * 0"
+  schedule: "0 3 * * *"
   concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
       backoffLimit: 3
-      activeDeadlineSeconds: 900
+      activeDeadlineSeconds: 1800
       template:
         metadata:
           labels: {app: rahbar-indexer}
@@ -39,6 +43,8 @@ spec:
                     - ALL
               volumeMounts:
                 - {name: tmp, mountPath: /tmp}
+                - {name: datalake, mountPath: /datalake}
+                - {name: results, mountPath: /results}
               resources:
                 requests:
                   cpu: 200m
@@ -48,3 +54,7 @@ spec:
                   memory: 768Mi
           volumes:
             - {name: tmp, emptyDir: {}}
+            - name: datalake
+              persistentVolumeClaim: {claimName: rahbar-datalake}
+            - name: results
+              persistentVolumeClaim: {claimName: rahbar-results}

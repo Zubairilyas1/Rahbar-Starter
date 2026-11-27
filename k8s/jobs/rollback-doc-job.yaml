@@ -1,0 +1,57 @@
+# A2 rollback demo: restore an archived (superseded) document version. Its chunks
+# become retrievable again and the version that superseded it is archived instead.
+# Edit the document name in `args`, then:
+#   kubectl delete job rahbar-rollback -n rahbar --ignore-not-found
+#   kubectl apply -f k8s/jobs/rollback-doc-job.yaml && kubectl logs -f job/rahbar-rollback -n rahbar
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rahbar-rollback
+  namespace: rahbar
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: rahbar-indexer}
+    spec:
+      serviceAccountName: rahbar-indexer
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: indexer
+          image: rahbar-indexer:dev   # overlays pin this to a real tag/SHA
+          imagePullPolicy: IfNotPresent
+          args: ["--rollback", "faculty-entrepreneurship-and-technical-start-ups-policy.pdf"]
+          envFrom: [{configMapRef: {name: rahbar-config}}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: datalake, mountPath: /datalake}
+            - {name: results, mountPath: /results}
+          # F5: sized from the measured peak of a full first ingestion (OCR + embedding
+          # batches); see docs/evidence/a3/kubectl-top-indexer.txt.
+          resources:
+            requests:
+              cpu: 200m
+              memory: 320Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - name: datalake
+          persistentVolumeClaim: {claimName: rahbar-datalake}
+        - name: results
+          persistentVolumeClaim: {claimName: rahbar-results}

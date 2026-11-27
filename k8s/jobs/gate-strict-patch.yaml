@@ -1,0 +1,6 @@
+# Strict faithfulness threshold, for the F2 demo "a ConfigMap edit changes the gate
+# outcome without rebuilding the image":
+#   kubectl patch configmap rahbar-gate -n rahbar --patch-file k8s/jobs/gate-strict-patch.yaml
+# Undo with k8s/jobs/gate-default-patch.yaml (or kubectl apply -k k8s/overlays/dev).
+data:
+  GATE_MIN_FAITHFULNESS: "0.99"
