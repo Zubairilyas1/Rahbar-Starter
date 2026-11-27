@@ -1,115 +1,87 @@
-"""CLI Trace Inspection Tool.
-Assignment 03 Part D2 (RAGOps paper 3.2.3, Table 2).
+#!/usr/bin/env python3
+"""Trace tool (Assignment 03 D2, RAGOps paper 3.2.3, Table 2).
 
-Given a trace ID, retrieves the trace record from traces/live_traces.jsonl
-and prints:
-1. Complete query provenance and latency breakdown.
-2. The exact assembled context passages with chunk IDs, scores, and sources.
-3. The exact prompt sent to the LLM.
-4. The generated response, citations, and guardrail actions.
+Takes a trace id and prints the exact context and prompt that produced that answer,
+with the provenance needed to reproduce it (collection + version, embedding model +
+version, filters, model parameters, per-stage latency, guardrail actions).
+
+    python traces/inspect.py <trace_id>                      # searches traces/ recursively
+    python traces/inspect.py <trace_id> --path traces/cluster
+    python traces/inspect.py <trace_id> --path api.log       # saved `kubectl logs` output
+    python traces/inspect.py <trace_id> --json               # the raw record
+
+A unique prefix of the id is enough.
 """
 
+from __future__ import annotations
+
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
 
-DEFAULT_TRACE_FILE = Path("traces/live_traces.jsonl")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from trace_io import DEFAULT_TRACE_PATH, find_trace  # noqa: E402
 
 
-def inspect_trace(trace_id: str, trace_file: Path = DEFAULT_TRACE_FILE) -> int:
-    if not trace_file.exists():
-        print(f"Error: Trace log file not found at {trace_file}")
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Print the exact context and prompt behind a trace id")
+    ap.add_argument("trace_id")
+    ap.add_argument("--path", "--file", dest="path", default=str(DEFAULT_TRACE_PATH))
+    ap.add_argument("--json", action="store_true", help="print the raw trace record")
+    args = ap.parse_args()
+
+    rec = find_trace(Path(args.path), args.trace_id)
+    if rec is None:
+        print(f"No trace matching '{args.trace_id}' under {args.path}")
         return 1
+    if args.json:
+        print(json.dumps(rec, indent=2, ensure_ascii=False))
+        return 0
 
-    matched_record = None
-    with open(trace_file, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                record = json.loads(line)
-                if record.get("trace_id") == trace_id or trace_id in record.get("trace_id", ""):
-                    matched_record = record
-                    break
-            except Exception:
-                continue
+    bar = "=" * 96
+    print(bar)
+    print(f"TRACE {rec['trace_id']}   {rec.get('timestamp')}")
+    print(bar)
+    print(f"user query        : {rec.get('user_query')}")
+    print(f"rewritten query   : {rec.get('rewritten_query')}")
+    print(f"pipeline version  : {rec.get('pipeline_version', '-')}")
+    print(f"collection        : {rec.get('collection_name')}  (version {rec.get('collection_version')})")
+    print(f"embedding model   : {rec.get('embedding_model')}  (version {rec.get('embedding_version')})")
+    print(f"filters applied   : {json.dumps(rec.get('filters_applied'))}")
+    print(f"model / params    : {rec.get('model')}  {json.dumps(rec.get('parameters'))}")
+    print(f"cache             : {rec.get('cache_status')}")
+    lat = rec.get("latency_per_stage", {})
+    print("latency (ms)      : " + ", ".join(f"{k.removesuffix('_ms')}={v}" for k, v in lat.items()))
 
-    if not matched_record:
-        print(f"No trace found matching ID: '{trace_id}' in {trace_file}")
-        return 1
+    print("\n--- retrieved context (reranked order) " + "-" * 57)
+    for i, c in enumerate(rec.get("retrieved_chunks", []), 1):
+        doc = c.get("document_id") or c.get("source")
+        print(f"[{i}] score={c.get('score'):.4f}  chunk={c.get('chunk_id')}  doc={doc}  "
+              f"version={c.get('doc_version', '-')}  page={c.get('page')}  section={c.get('section', '')}")
+    if not rec.get("retrieved_chunks"):
+        print("(nothing retrieved)")
 
-    print("\n" + "=" * 80)
-    print(f"RAHBAR RAGOps: Trace Record Inspection [{matched_record.get('trace_id')}]")
-    print("=" * 80)
+    print("\n--- guardrail actions " + "-" * 74)
+    for g in rec.get("guardrail_actions", []):
+        print(f"{g.get('rail')}: {g.get('action')}  -- {g.get('reason')}")
 
-    print(f"Timestamp:          {matched_record.get('timestamp')}")
-    print(f"User Query:         {matched_record.get('user_query')}")
-    if matched_record.get("rewritten_query"):
-        print(f"Rewritten Query:    {matched_record.get('rewritten_query')}")
-    print(f"Embedding Model:    {matched_record.get('embedding_model')} (version: {matched_record.get('embedding_version')})")
-    print(f"Collection:         {matched_record.get('collection_name')} (version: {matched_record.get('collection_version')})")
-    print(f"Cache Status:       {matched_record.get('cache_status', 'miss').upper()}")
-    print(f"Prompt Hash:        {matched_record.get('prompt_hash')[:16]}...")
-    
-    print("\n--- Latency Breakdown (ms) ---")
-    latencies = matched_record.get("latency_per_stage", {})
-    for stage, ms in latencies.items():
-        print(f"  - {stage:<20}: {ms:>8.2f} ms")
+    prompt = rec.get("full_prompt", "")
+    ok = hashlib.sha256(prompt.encode("utf-8")).hexdigest() == rec.get("prompt_hash")
+    print(f"\n--- exact prompt sent to the model (sha256 {str(rec.get('prompt_hash'))[:16]}..., "
+          f"hash {'VERIFIED' if ok else 'MISMATCH'}) " + "-" * 10)
+    print(prompt)
 
-    print("\n--- Guardrail Actions ---")
-    rails = matched_record.get("guardrail_actions", [])
-    if rails:
-        for r in rails:
-            flag = "[TRIGGERED]" if r.get("triggered") else "[PASSED]"
-            print(f"  {flag:<12} Rail: {r.get('rail')} | Action: {r.get('action')} | Reason: {r.get('reason')}")
-    else:
-        print("  All safety and injection guardrails passed cleanly.")
-
-    print("\n--- Retrieved Grounding Passages ---")
-    chunks = matched_record.get("retrieved_chunks", [])
-    if chunks:
-        for idx, c in enumerate(chunks, 1):
-            doc = c.get('source') or c.get('document_id') or 'unknown'
-            print(f"  [{idx}] Chunk ID: {c.get('chunk_id')} | Doc: {doc} (p. {c.get('page')}) | Score: {c.get('score', 0.0):.4f}")
-    else:
-        print("  No passages retrieved (honest abstention triggered before retrieval).")
-
-    print("\n--- Exact Assembled Prompt Reconstructed ---")
-    print("-" * 80)
-    print(matched_record.get("full_prompt", "[Prompt not captured]"))
-    print("-" * 80)
-
-    print("\n--- Generated Answer & Provenance ---")
-    resp = matched_record.get("response", {})
-    print(f"Answer:                 {resp.get('answer')}")
-    print(f"Confidence:             {resp.get('confidence')}")
-    print(f"Answered From Context:  {resp.get('answered_from_context')}")
-    
-    citations = matched_record.get("citations", [])
-    if citations:
-        print("Citations:")
-        for cit in citations:
-            print(f"  - {cit.get('source')} (section: {cit.get('section', 'N/A')}, p. {cit.get('page')})")
-    print("=" * 80 + "\n")
+    resp = rec.get("response", {})
+    print("\n--- response " + "-" * 83)
+    print(f"answered_from_context={resp.get('answered_from_context')}  confidence={resp.get('confidence')}  "
+          f"provider={resp.get('provider')}")
+    print(resp.get("answer", ""))
+    print("citations: " + ", ".join(f"{c.get('source')} p.{c.get('page')}" for c in rec.get("citations", [])))
+    print(bar)
     return 0
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Inspect a specific query trace by trace ID")
-    parser.add_argument("trace_id", nargs="?", help="Trace ID to inspect")
-    parser.add_argument("--trace-id", dest="opt_trace_id", help="Trace ID (as flag)")
-    parser.add_argument("--file", default=str(DEFAULT_TRACE_FILE), help="Path to live_traces.jsonl")
-    args = parser.parse_args()
-
-    tid = args.trace_id or args.opt_trace_id
-    if not tid:
-        print("Error: Please provide a trace ID. Usage: python traces/inspect.py <trace_id>")
-        sys.exit(1)
-
-    sys.exit(inspect_trace(tid, Path(args.file)))
-
-
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
