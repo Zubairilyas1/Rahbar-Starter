@@ -6,7 +6,9 @@ Planted problems included:
 - 1 near-duplicate (doc06)
 - 1 truncated/corrupt file (doc07)
 - 1 missing metadata file (doc08)
-- 1 older/recency conflict file (doc09)
+- 1 older/recency conflict file (doc09, older version of doc01)
+- 1 newer version of an existing first-batch document (doc11, hand-written,
+  supersedes faculty-entrepreneurship-and-technical-start-ups-policy.pdf)
 - 1 prompt injection file (doc10)
 Plus 3 clean passing documents (doc01, doc02, doc03).
 """
@@ -165,7 +167,7 @@ The university food court and cafeteria facilities operate daily from 08:00 to 1
 title: Campus Wireless Network Usage Policy 2024
 doc_version: 2024-01
 source: doc09-campus-wifi-policy-2024-outdated.md
-superseded: true
+superseded: false
 ---
 
 # Campus Wireless Network Usage Policy 2024
@@ -197,25 +199,28 @@ Admit cards are generated 7 days prior to midterm and final examinations. Studen
 }
 
 # Write files and generate index
+import re
+
+
+def _front(content: str, key: str) -> str | None:
+    m = re.search(rf"^{key}:\s*(.+)$", content, re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
 index_entries = []
 for filename, content in docs.items():
     file_path = BATCH_B_DIR / filename
     file_path.write_text(content.strip(), encoding="utf-8")
-    
-    # Parse version & superseded from front-matter
-    ver = "2026-09"
-    sup = False
-    if "2024-01" in content:
-        ver = "2024-01"
-        sup = True
-    elif "doc08" in filename:
-        ver = "unknown"
-        
+
+# Index every Markdown file in the batch, including hand-written ones such as
+# doc11 (a newer version of a document from the first corpus).
+for file_path in sorted(BATCH_B_DIR.glob("doc*.md")):
+    content = file_path.read_text(encoding="utf-8")
     index_entries.append({
-        "file": filename,
-        "doc_version": ver,
-        "superseded": sup
+        "file": file_path.name,
+        "doc_version": _front(content, "doc_version") or "unknown",
+        "superseded": (_front(content, "superseded") or "false").lower() == "true",
     })
 
-(BATCH_B_DIR / "_index.json").write_text(json.dumps(index_entries, indent=2), encoding="utf-8")
-print(f"Successfully synthesized {len(docs)} documents in {BATCH_B_DIR} with planted defects!")
+(BATCH_B_DIR / "_index.json").write_text(json.dumps(index_entries, indent=2) + "\n", encoding="utf-8")
+print(f"Batch B: {len(index_entries)} documents in {BATCH_B_DIR} with planted defects")

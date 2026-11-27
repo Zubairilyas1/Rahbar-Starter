@@ -42,11 +42,16 @@
   {
     "file": "doc09-campus-wifi-policy-2024-outdated.md",
     "doc_version": "2024-01",
-    "superseded": true
+    "superseded": false
   },
   {
     "file": "doc10-student-portal-guidelines-injected.md",
     "doc_version": "2026-09",
+    "superseded": false
+  },
+  {
+    "file": "doc11-faculty-entrepreneurship-and-technical-start-ups-policy-2026.md",
+    "doc_version": "2026-10",
     "superseded": false
   }
 ]

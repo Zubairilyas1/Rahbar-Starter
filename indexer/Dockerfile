@@ -39,7 +39,12 @@ COPY corpus/raw/ /corpus/
 # university site from CI.
 COPY eval/fixtures/ /app/fixtures/
 
-RUN mkdir -p /tmp && chown -R rahbar:rahbar /app /corpus /tmp
+# Assignment 03 Batch B (planted problems), copied into the data lake's incoming/
+# folder by k8s/jobs/ingest-batch-b-job.yaml. The image's /corpus seeds an empty
+# data lake (SEED_CORPUS_DIR); every later write goes to the rahbar-datalake PVC.
+COPY corpus/batch_b/ /batches/batch_b/
+
+RUN mkdir -p /tmp /datalake /results && chown -R rahbar:rahbar /app /corpus /batches /tmp /datalake /results
 USER rahbar
 
 ENTRYPOINT ["python", "-m", "pipeline.run"]
