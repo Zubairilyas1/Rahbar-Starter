@@ -29,10 +29,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Print the exact context and prompt behind a trace id")
     ap.add_argument("trace_id")
     ap.add_argument("--path", "--file", dest="path", default=str(DEFAULT_TRACE_PATH))
+    ap.add_argument("--since", help="only traces at/after this UTC time (when an id repeats across runs)")
+    ap.add_argument("--until", help="only traces at/before this UTC time")
     ap.add_argument("--json", action="store_true", help="print the raw trace record")
     args = ap.parse_args()
 
-    rec = find_trace(Path(args.path), args.trace_id)
+    rec = find_trace(Path(args.path), args.trace_id, args.since, args.until)
     if rec is None:
         print(f"No trace matching '{args.trace_id}' under {args.path}")
         return 1

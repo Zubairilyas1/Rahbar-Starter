@@ -107,7 +107,9 @@ def prepare_data_lake(settings: IndexerSettings) -> dict[str, int]:
         d.mkdir(parents=True, exist_ok=True)
 
     seeded = 0
-    marker = Path(settings.state_dir) / ".seeded"
+    # one marker for the whole data lake (not per collection): a candidate collection
+    # indexed later must not re-seed documents that were archived or deleted since.
+    marker = Path(settings.corpus_dir) / ".seeded"
     seed = Path(settings.seed_corpus_dir) if settings.seed_corpus_dir else None
     if seed and seed.exists() and not marker.exists():
         for f in seed.iterdir():

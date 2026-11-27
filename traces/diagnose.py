@@ -77,10 +77,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Root-cause a trace using only the trace record")
     ap.add_argument("trace_id", nargs="?", help="trace id (default: newest trace)")
     ap.add_argument("--path", "--file", dest="path", default=str(DEFAULT_TRACE_PATH))
+    ap.add_argument("--since", help="only traces at/after this UTC time (when an id repeats across runs)")
+    ap.add_argument("--until", help="only traces at/before this UTC time")
     args = ap.parse_args()
 
     if args.trace_id:
-        rec = find_trace(Path(args.path), args.trace_id)
+        rec = find_trace(Path(args.path), args.trace_id, args.since, args.until)
     else:
         all_recs = load_traces(Path(args.path))
         rec = all_recs[-1] if all_recs else None

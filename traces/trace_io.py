@@ -43,18 +43,24 @@ def iter_traces(path: Path) -> Iterator[dict[str, Any]]:
 
 
 def load_traces(path: Path) -> list[dict[str, Any]]:
-    seen: dict[str, dict[str, Any]] = {}
+    seen: dict[tuple[str, str], dict[str, Any]] = {}
     for rec in iter_traces(path):
-        seen[rec["trace_id"]] = rec      # the same trace can be in a file and in a log dump
+        # the same trace can be in a file and in a log dump; older eval runs reused ids
+        seen[(rec["trace_id"], rec.get("timestamp", ""))] = rec
     return sorted(seen.values(), key=lambda r: r.get("timestamp", ""))
 
 
-def find_trace(path: Path, trace_id: str) -> dict[str, Any] | None:
+def find_trace(path: Path, trace_id: str, since: str | None = None, until: str | None = None) -> dict[str, Any] | None:
+    """Exact id match first, else the first id starting with `trace_id`. `since`/`until`
+    (UTC timestamps, e.g. 2026-11-27T16:52:00Z) pick one run when an id repeats."""
     exact = None
     prefix = None
     for rec in iter_traces(path):
+        ts = rec.get("timestamp", "")
+        if (since and ts < since) or (until and ts > until):
+            continue
         tid = rec.get("trace_id", "")
-        if tid == trace_id:
+        if tid == trace_id and exact is None:
             exact = rec
         elif prefix is None and tid.startswith(trace_id):
             prefix = rec

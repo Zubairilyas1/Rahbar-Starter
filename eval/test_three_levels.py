@@ -140,6 +140,9 @@ class Target:
         self.seed = seed
         self.http = httpx.Client(timeout=timeout)
         self.headers = {"X-RAGOps-No-Cache": "1"}
+        # Trace ids of this suite run: eval-<label>-<time>-r<run>-<step>-<question id>,
+        # unique per run so a trace id in the report names exactly one trace.
+        self.run_id = "eval"
 
     def info(self) -> dict[str, Any]:
         try:
@@ -343,14 +346,14 @@ def component_level(t: Target, golden: list[dict[str, Any]], rng: random.Random,
     contexts: dict[str, list[dict[str, Any]]] = {}
     for g in answerable:
         gt = norm_doc(g["ground_truth_doc"])
-        res = t.retrieve(g["question"], f"eval-r{run}-ret-{g['id']}")
+        res = t.retrieve(g["question"], f"{t.run_id}-r{run}-ret-{g['id']}")
         passages = res.get("passages", [])
         contexts[g["id"]] = passages
         m = _rank_metrics([p["source"] for p in passages], gt)
         clean_rows.append(m)
 
         noisy_q = add_typos(g["question"], rng)
-        noisy = t.retrieve(noisy_q, f"eval-r{run}-noise-{g['id']}")
+        noisy = t.retrieve(noisy_q, f"{t.run_id}-r{run}-noise-{g['id']}")
         nm = _rank_metrics([p["source"] for p in noisy.get("passages", [])], gt)
         noisy_rows.append(nm)
         per_q.setdefault(g["id"], {}).update({
@@ -386,7 +389,7 @@ def end_to_end_level(t: Target, golden: list[dict[str, Any]], contexts: dict[str
     disagreements: list[str] = []
 
     for g in golden:
-        resp, elapsed = t.ask(g["question"], f"eval-r{run}-ask-{g['id']}")
+        resp, elapsed = t.ask(g["question"], f"{t.run_id}-r{run}-ask-{g['id']}")
         latencies.append(elapsed)
         answered = bool(resp.get("answered_from_context"))
         retrieved = {(norm_doc(r["source"]), r.get("page")) for r in resp.get("retrieved", [])}
@@ -413,7 +416,7 @@ def end_to_end_level(t: Target, golden: list[dict[str, Any]], contexts: dict[str
         answered_answerable += 1
         gt_cited += any(norm_doc(c["source"]) == norm_doc(g.get("ground_truth_doc")) for c in cites)
 
-        passages = contexts.get(g["id"]) or t.retrieve(g["question"], f"eval-r{run}-ctx-{g['id']}").get("passages", [])
+        passages = contexts.get(g["id"]) or t.retrieve(g["question"], f"{t.run_id}-r{run}-ctx-{g['id']}").get("passages", [])
         ok, reason = t.judge(g["question"], resp.get("answer", ""), passages)
         judged += 1
         supported += ok
@@ -540,6 +543,7 @@ def main() -> int:
 
     t = Target(args.api_url, args.ollama_url, args.embed_model, args.judge_model, args.timeout, args.seed)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    t.run_id = f"eval-{args.label}-{stamp[4:13]}"
     started = time.perf_counter()
     try:
         info = t.info()
