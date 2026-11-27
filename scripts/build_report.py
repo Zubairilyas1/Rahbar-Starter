@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -322,7 +323,7 @@ SUITE_ROWS = [
     ("Component", "component_level", "recall_at_5", "Recall@5"),
     ("Component", "component_level", "mrr", "MRR"),
     ("Component", "component_level", "ndcg_at_5", "nDCG@5"),
-    ("End-to-end", "end_to_end_level", "faithfulness", "Faithfulness (LLM judge)"),
+    ("End-to-end", "end_to_end_level", "faithfulness", "Faithfulness (grounding judge)"),
     ("End-to-end", "end_to_end_level", "judge_human_agreement", "Judge/human agreement"),
     ("End-to-end", "end_to_end_level", "abstention_correctness", "Abstention correctness"),
     ("End-to-end", "end_to_end_level", "citation_validity", "Citation validity"),
@@ -512,19 +513,23 @@ def part_f(d: dict[str, Any]) -> list[Any]:
             ["Controlled release", "Deployment + Service api-candidate (own collection), then a rolling update of api (maxUnavailable 0), kubectl rollout undo"],
             ["Observability on the cluster", "Traces on stdout (kubectl logs) + PVC rahbar-traces; /metrics via kubectl port-forward"]]
     out.append(table(rows, [6.0, 11.0], font_size=9.5))
-    top = sorted(SHOT_DIR.glob("kubectl-top*.txt")) if SHOT_DIR.exists() else []
-    if top:
-        lines = []
-        for f in top:
+    stats = sorted(SHOT_DIR.glob("docker-stats-*.txt")) if SHOT_DIR.exists() else []
+    if stats:
+        rows = [["When", "Pod (container)", "CPU", "Memory / limit"]]
+        for f in stats:
+            when = f.stem.removeprefix("docker-stats-")
             for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
-                if line.strip() and not line.startswith("NAME") and not line.startswith("POD"):
-                    lines.append(line.split())
-        rows = [["Pod (container)", "CPU (measured)", "Memory (measured)"]] + [[esc(" ".join(x[:-2])), esc(x[-2]), esc(x[-1])] for x in lines[:12]]
-        out.append(P("F5: requests and limits were set from these measurements (kubectl top pods --containers, during the eval and "
-                     "indexer Jobs). Requests sit near the observed steady state and limits leave about 2x headroom over the observed peak.", BODY))
-        out.append(table(rows, [9.0, 4.0, 4.0], font_size=9.0))
+                parts = line.split("\t")
+                if len(parts) == 3 and not line.startswith("#") and "CPU" not in line:
+                    rows.append([esc(when), esc(re.sub(r"-[a-z0-9]{8,10}-[a-z0-9]{5}|-[a-z0-9]{5}(?= )", "", parts[0])),
+                                 esc(parts[1]), esc(parts[2])])
+        out.append(P("F5: Docker Desktop's Kubernetes has no metrics-server, so we measured with <i>docker stats</i> (every pod "
+                     "container is a Docker container there) during each workload. The indexer sat at its 500m CPU limit while "
+                     "OCRing, so its limit became 2 CPUs. The other requests sit near the measured steady state, and the limits "
+                     "leave headroom over the measured peak.", BODY))
+        out.append(table(rows, [3.6, 6.4, 2.2, 4.8], font_size=8.6))
     else:
-        out.append(P("F5 measurements: " + pending("docs/evidence/a3/kubectl-top-*.txt (kubectl top pods -n rahbar --containers)"), BODY))
+        out.append(P("F5 measurements: " + pending("docs/evidence/a3/docker-stats-*.txt (docker stats during the Jobs)"), BODY))
     return out
 
 

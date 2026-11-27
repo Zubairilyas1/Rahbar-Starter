@@ -1,0 +1,57 @@
+# Baseline re-measurement with a single suite run (E3 data drift after Batch B, and
+# the reference the release gate compares candidates with). Part B's stochasticity
+# (two runs) comes from k8s/jobs/eval-baseline-job.yaml.
+#   kubectl delete job rahbar-eval-baseline-1run -n rahbar --ignore-not-found
+#   kubectl apply -f k8s/jobs/eval-baseline-1run-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rahbar-eval-baseline-1run
+  namespace: rahbar
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 14400   # full suite x2 on CPU-only Ollama takes ~2 h
+  template:
+    metadata:
+      labels: {app: eval-job}
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: evaluator
+          image: rahbar-eval:dev
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: rahbar-config}
+            - configMapRef: {name: rahbar-gate}
+          env:
+            - {name: EVAL_LABEL, value: "baseline"}
+            - {name: EVAL_MODE, value: "full"}
+            - {name: EVAL_TARGET_URL, value: "http://api:8000"}
+            - {name: EVAL_REPEAT, value: "1"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: results, mountPath: /results}
+          # F5: the suite is an HTTP client; measured peak in docs/evidence/a3/kubectl-top-under-eval.txt.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - name: results
+          persistentVolumeClaim: {claimName: rahbar-results}

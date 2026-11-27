@@ -11,7 +11,7 @@ metadata:
   namespace: rahbar
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 5400
+  activeDeadlineSeconds: 14400   # full suite x2 on CPU-only Ollama takes ~2 h
   template:
     metadata:
       labels: {app: eval-job}

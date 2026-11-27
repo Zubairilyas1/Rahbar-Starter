@@ -82,10 +82,12 @@ UNRELATED_PAIRS = [
 ]
 
 JUDGE_SYSTEM = (
-    "You are a strict grader of a retrieval-augmented assistant. Decide whether EVERY factual "
-    "claim in the ANSWER is directly supported by the CONTEXT passages. Paraphrase is fine; "
-    "any number, date, name or rule not present in the CONTEXT makes the answer unsupported. "
-    'Reply with JSON only: {"verdict": "supported" | "unsupported", "reason": "<one sentence>"}'
+    "You check ONE thing: whether the facts stated in the ANSWER appear in the CONTEXT passages. "
+    "Do NOT judge whether the answer is complete or fully answers the QUESTION: a short answer "
+    "that states only facts found in the CONTEXT is grounded. Paraphrase is fine. "
+    "List every number, date, name, condition or rule in the ANSWER that the CONTEXT does not "
+    "contain or that the CONTEXT contradicts. If every fact appears in the CONTEXT, the list is empty. "
+    'Reply with JSON only: {"unsupported_facts": ["<fact>", ...], "reason": "<one sentence>"}'
 )
 
 
@@ -173,6 +175,13 @@ class Target:
         return dict(r.json()), elapsed
 
     def judge(self, question: str, answer: str, passages: list[dict[str, Any]]) -> tuple[bool, str]:
+        if self.judge_model == "grounding":
+            return grounding_judge(question, answer, passages)
+        return self.judge_llm(question, answer, passages)
+
+    def judge_llm(self, question: str, answer: str, passages: list[dict[str, Any]]) -> tuple[bool, str]:
+        """Optional LLM judge. With llama3.2:3b its verdicts contradicted its own reasons on
+        our baseline (see the report), so the default judge is grounding_judge()."""
         context = "\n\n".join(f"[{i}] ({p['source']} p.{p.get('page')}) {p['text']}" for i, p in enumerate(passages, 1))
         payload = {
             "model": self.judge_model,
@@ -190,8 +199,62 @@ class Target:
             out = json.loads(r.json()["message"]["content"])
         except Exception as exc:
             raise SuiteError(f"faithfulness judge ({self.judge_model}) failed: {exc}") from exc
-        verdict = str(out.get("verdict", "")).strip().lower()
-        return verdict == "supported", str(out.get("reason", ""))[:300]
+        # The verdict is derived from the listed facts, not asked for separately: a
+        # 3B judge asked for both often contradicted its own reason.
+        facts = out.get("unsupported_facts")
+        if not isinstance(facts, list):
+            raise SuiteError(f"judge returned no unsupported_facts list: {str(out)[:200]}")
+        facts = [str(f).strip() for f in facts if str(f).strip()]
+        reason = str(out.get("reason", ""))
+        return not facts, ((f"unsupported: {'; '.join(facts)} | " if facts else "") + reason)[:300]
+
+
+_STOP = set("""a about above after again against all also among and any are because been before being
+below between both but by can could does doing down during each from further have having here into its
+just more most must only other over same should some such than that their them then there these they
+this those through under until upon very what when where which while will with within without would your
+student students university shall which""".split())
+_NUM = re.compile(r"\d+(?:[.,:]\d+)*")
+
+
+def _nums(text: str) -> set[str]:
+    out = set()
+    for m in _NUM.findall(text):
+        v = m.replace(",", "")
+        if ":" in v:
+            out.add(v)
+            continue
+        try:
+            out.add(f"{float(v):g}")
+        except ValueError:
+            out.add(v)
+    return out
+
+
+def _words(text: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z]+", text.lower()) if len(w) > 3 and w not in _STOP]
+
+
+def grounding_judge(question: str, answer: str, passages: list[dict[str, Any]],
+                    min_word_share: float = 0.6) -> tuple[bool, str]:
+    """Deterministic faithfulness check against the retrieved context.
+
+    Grounded when (1) every number in the answer (CGPA, %, years, times, fees) that is
+    not just echoed from the question appears in the context, and (2) at least 60% of
+    the answer's content words appear in the context (5-letter prefix match, so
+    plural and tense variants count). Reproducible and explainable; its agreement with
+    hand labels is reported like an LLM judge's would be.
+    """
+    context = " ".join(p.get("text", "") for p in passages)
+    ctx_nums, q_nums = _nums(context), _nums(question)
+    missing = sorted(n for n in _nums(answer) - q_nums if n not in ctx_nums)
+    words = _words(answer)
+    prefixes = {w[:5] for w in _words(context)}
+    share = (sum(w[:5] in prefixes for w in words) / len(words)) if words else 1.0
+    ok = not missing and share >= min_word_share
+    reason = (f"numbers not in context: {', '.join(missing)}; " if missing else "all numbers in context; ") + \
+             f"content-word overlap {share:.2f} (need {min_word_share:.2f})"
+    return ok, reason
 
 
 def load_golden(path: Path) -> list[dict[str, Any]]:
@@ -430,7 +493,7 @@ SUMMARY_ROWS = [
     ("Component", "component_level.noise.noisy_recall_at_5", "Recall@5 with typos", "{:.4f}"),
     ("Component", "component_level.noise.delta_recall_at_5", "  change", "{:+.4f}"),
     ("Component", "component_level.noise.delta_mrr", "  MRR change with typos", "{:+.4f}"),
-    ("End-to-end", "end_to_end_level.faithfulness", "Faithfulness (LLM judge)", "{:.4f}"),
+    ("End-to-end", "end_to_end_level.faithfulness", "Faithfulness (grounding judge)", "{:.4f}"),
     ("End-to-end", "end_to_end_level.judge_human_agreement", "Judge/human agreement", "{:.4f}"),
     ("End-to-end", "end_to_end_level.abstention_correctness", "Abstention correctness", "{:.4f}"),
     ("End-to-end", "end_to_end_level.false_abstention_rate", "False abstention (answerable)", "{:.4f}"),
@@ -463,7 +526,8 @@ def main() -> int:
     ap.add_argument("--api-url", default=os.environ.get("EVAL_TARGET_URL", "http://localhost:8000"))
     ap.add_argument("--ollama-url", default=os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"))
     ap.add_argument("--embed-model", default=os.environ.get("EMBED_MODEL", "nomic-embed-text"))
-    ap.add_argument("--judge-model", default=os.environ.get("JUDGE_MODEL", os.environ.get("LLM_MODEL", "llama3.2:3b")))
+    ap.add_argument("--judge-model", default=os.environ.get("JUDGE_MODEL", "grounding"),
+                    help="grounding (deterministic, default) or an Ollama model name for an LLM judge")
     ap.add_argument("--golden", default=os.environ.get("EVAL_GOLDEN", str(HERE / "golden.jsonl")))
     ap.add_argument("--labels", default=os.environ.get("EVAL_HUMAN_LABELS", str(HERE / "human_labels.jsonl")))
     ap.add_argument("--results-dir", default=os.environ.get("RESULTS_DIR", str(HERE / "results")))
@@ -509,8 +573,12 @@ def main() -> int:
         "component_level": runs[0]["component_level"],
         "end_to_end_level": runs[0]["end_to_end_level"],
         "stochasticity": {
+            # rates and scores only: latency depends on machine load, and counts
+            # (citations_total, questions, ...) are not quality metrics
             "max_abs_delta": max((abs(v["delta"]) for k, v in stoch.items()
-                                  if "latency" not in k and "time_ms" not in k), default=0.0),
+                                  if not any(x in k for x in ("latency", "time_ms", "total", "questions",
+                                                               "judged", "compared", "pairs", "measured"))),
+                                 default=0.0),
             "metrics": stoch,
         },
         "runs": runs,

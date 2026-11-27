@@ -171,19 +171,18 @@ def main() -> int:
     print(f"similarity threshold       : {summary['coverage_threshold']}")
     print(f"covered                    : {summary['covered_queries']} / {summary['total_live_queries']}"
           f"  = {summary['coverage_percentage']}%   (required >= {args.min_coverage:.0%})")
-    print("-" * 80)
-    print(f"{'topic':<28} | {'total':>5} | {'gaps':>4} | {'coverage':>8}")
-    for topic, st in sorted(summary["topic_breakdown"].items(), key=lambda kv: -kv[1]["gaps"]):
-        print(f"{topic:<28} | {st['total']:>5} | {st['gaps']:>4} | {st['coverage_pct']:>7.1f}%")
+    topics = summary["topic_breakdown"]
+    full = sorted(t for t, st in topics.items() if st["gaps"] == 0)
+    print(f"fully covered topics ({len(full)}): {', '.join(full) or '-'}")
     gaps = [q for q in summary["query_details"] if not q["is_covered"]]
     if gaps:
         print("-" * 80)
-        print("uncovered live queries (grouped by topic):")
+        print("uncovered live queries, grouped by topic  [topic] gaps/total:")
         by_topic: dict[str, list[dict]] = defaultdict(list)
         for g in gaps:
             by_topic[g["topic"]].append(g)
-        for topic, items in sorted(by_topic.items()):
-            print(f"  [{topic}]")
+        for topic, items in sorted(by_topic.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            print(f"  [{topic}] {topics[topic]['gaps']}/{topics[topic]['total']}")
             for g in items:
                 print(f"    {g['query_id']}  sim={g['max_similarity']:.3f}  {g['query']}")
     print("=" * 80)

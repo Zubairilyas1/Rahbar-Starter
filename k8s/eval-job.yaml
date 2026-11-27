@@ -18,7 +18,7 @@ metadata:
   namespace: rahbar
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 5400
+  activeDeadlineSeconds: 14400   # full suite x2 on CPU-only Ollama takes ~2 h
   template:
     metadata:
       labels: {app: eval-job}
@@ -41,6 +41,9 @@ spec:
             - {name: EVAL_LABEL, value: "candidate"}
             - {name: EVAL_MODE, value: "full"}
             - {name: EVAL_TARGET_URL, value: "http://api-candidate:8000"}
+            # One run is enough for a gate decision (the gate reads run 1); run-to-run
+            # stochasticity is measured once, on the Part B baseline (EVAL_REPEAT=2).
+            - {name: EVAL_REPEAT, value: "1"}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
