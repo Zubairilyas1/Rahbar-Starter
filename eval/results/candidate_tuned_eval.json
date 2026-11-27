@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-11-23T18:30:00Z",
+  "configuration": {
+    "chunk_size": 450,
+    "chunk_overlap": 120,
+    "top_k": 5,
+    "relevance_floor": 0.35,
+    "temperature": 0.2,
+    "notes": "Optimized chunk overlap and prompt template tuning"
+  },
+  "module_level": {
+    "mean_paraphrase_similarity": 0.8012,
+    "mean_unrelated_similarity": 0.392,
+    "separation_gap": 0.4092,
+    "embedding_time_ms": 76.5,
+    "determinism_max_diff": 0.0
+  },
+  "component_level": {
+    "recall_at_3": 0.9524,
+    "recall_at_5": 0.9524,
+    "mrr": 0.9524,
+    "ndcg_at_5": 0.9524,
+    "noise_recall_at_5": 0.8095,
+    "noise_degradation_pct": 15.0
+  },
+  "end_to_end_level": {
+    "faithfulness": 0.642,
+    "judge_human_agreement_pct": 80.0,
+    "abstention_correctness_pct": 100.0,
+    "citation_validity_pct": 100.0,
+    "latency_p50_s": 2.95,
+    "latency_p95_s": 20.85
+  }
+}
