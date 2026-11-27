@@ -17,7 +17,7 @@ metadata:
   namespace: rahbar
 spec:
   backoffLimit: 3
-  activeDeadlineSeconds: 1800
+  activeDeadlineSeconds: 7200   # first full ingestion OCRs scanned PDFs on CPU
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
@@ -46,14 +46,15 @@ spec:
             - {name: tmp, mountPath: /tmp}
             - {name: datalake, mountPath: /datalake}
             - {name: results, mountPath: /results}
-          # F5: sized from the measured peak of a full first ingestion (OCR + embedding
-          # batches); see docs/evidence/a3/kubectl-top-indexer.txt.
+          # F5: measured with docker stats during the first ingestion. With a 500m limit
+          # OCR sat at the cap (~49% of a core), so the limit is 2 CPUs. Memory
+          # peaked well under 768Mi. See docs/evidence/a3/docker-stats-*.txt.
           resources:
             requests:
-              cpu: 200m
+              cpu: 500m
               memory: 320Mi
             limits:
-              cpu: 500m
+              cpu: 2000m
               memory: 768Mi
       volumes:
         - {name: tmp, emptyDir: {}}

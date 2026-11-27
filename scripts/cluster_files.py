@@ -10,7 +10,7 @@ anyway. These commands use only `kubectl apply` and `kubectl logs`:
     python scripts/cluster_files.py put ./unseen-batch /datalake/incoming   # upload a folder (via a ConfigMap)
 
 All three mount rahbar-datalake (/datalake), rahbar-results (/results) and
-rahbar-traces (/traces) in a busybox pod with the same security context as the
+rahbar-traces (/traces) in a pod (local rahbar-eval image) with the same security context as the
 other workloads. No network policy admits it to anything; it only touches the volumes.
 """
 
@@ -28,7 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 NS = "rahbar"
-IMAGE = "busybox:1.36"
+IMAGE = "rahbar-eval:dev"   # local image (sh, tar, base64): no registry pull needed
 
 
 def kubectl(*args: str, inp: str | None = None, check: bool = True) -> str:

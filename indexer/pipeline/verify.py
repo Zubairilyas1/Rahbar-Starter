@@ -150,8 +150,22 @@ def check_completeness(doc: Document, raw_text: str, metadata: dict[str, Any]) -
     if "[TRUNCATED]" in stripped or "[CONTENT CUT OFF]" in stripped:
         return CheckResult("completeness", False, "Document contains explicit truncation marker")
     
-    # Check if the document ends abruptly mid-sentence
-    # Only flag if the last line is a full prose sentence (> 4 words) that ends abruptly without punctuation
+    # PDFs: "not truncated" means every page in the file was extracted and the last
+    # page has text. Their last line is usually a footer ("2026/350", a title), so the
+    # sentence-end heuristic below would quarantine real handbooks (it did, on our
+    # first cluster run).
+    expected_pages = metadata.get("expected_pages")
+    if expected_pages is not None:
+        if len(doc.pages) < int(expected_pages):
+            return CheckResult("completeness", False,
+                               f"Extraction truncated: {len(doc.pages)} of {expected_pages} pages extracted")
+        if not doc.pages[-1].text.strip():
+            return CheckResult("completeness", False, "Last page extracted empty (truncated or failed extraction)")
+        return CheckResult("completeness", True,
+                           f"Completeness verified: metadata present, all {expected_pages} pages extracted")
+
+    # Text/Markdown/HTML: flag a last line that is a prose sentence (> 4 words)
+    # ending without punctuation, or a cut-off word.
     lines = [line.strip() for line in stripped.splitlines() if line.strip()]
     if lines:
         last_line = lines[-1]
@@ -340,6 +354,13 @@ def verify_and_quarantine(
 
     for (doc, file_path, meta), raw_text, vec in zip(documents, raw_texts, vectors):
         res_quality = check_quality(doc, raw_text)
+        if file_path.suffix.lower() == ".pdf" and file_path.exists() and "expected_pages" not in meta:
+            try:
+                import pypdf
+
+                meta["expected_pages"] = len(pypdf.PdfReader(str(file_path)).pages)
+            except Exception as exc:  # unreadable PDF: let quality/completeness judge the text
+                log.warning("could not count pages of %s: %s", file_path.name, exc)
         res_completeness = check_completeness(doc, raw_text, meta)
         res_recency = check_recency(doc, meta, newest_versions)
         res_uniqueness, content_hash = check_uniqueness(

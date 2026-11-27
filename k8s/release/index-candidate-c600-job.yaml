@@ -9,7 +9,7 @@ metadata:
   namespace: rahbar
 spec:
   backoffLimit: 3
-  activeDeadlineSeconds: 1800
+  activeDeadlineSeconds: 7200   # first full ingestion OCRs scanned PDFs on CPU
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
@@ -51,10 +51,10 @@ spec:
           # batches); see docs/evidence/a3/kubectl-top-indexer.txt.
           resources:
             requests:
-              cpu: 200m
+              cpu: 500m
               memory: 320Mi
             limits:
-              cpu: 500m
+              cpu: 2000m
               memory: 768Mi
       volumes:
         - {name: tmp, emptyDir: {}}
