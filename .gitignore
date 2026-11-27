@@ -18,6 +18,7 @@ corpus/archive/
 !docs/*.pdf
 
 docs/*Master_Demo_and_Viva_Guide*.pdf
+scripts/*master_demo_guide*.py
 
 *.zip
 pdf_extracted_text.txt

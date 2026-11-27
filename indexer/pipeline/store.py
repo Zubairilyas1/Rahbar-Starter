@@ -10,16 +10,32 @@ from .models import Chunk
 
 log = logging.getLogger("rahbar.indexer.store")
 
+_EPHEMERAL_CLIENT: Any = None
+
 
 def get_client(settings: IndexerSettings) -> Any:
+    global _EPHEMERAL_CLIENT
     import chromadb
     from chromadb.config import Settings as ChromaSettings
 
-    return chromadb.HttpClient(
-        host=settings.chroma_host,
-        port=settings.chroma_port,
-        settings=ChromaSettings(anonymized_telemetry=False),
-    )
+    if getattr(settings, "chroma_host", "") == "ephemeral":
+        if _EPHEMERAL_CLIENT is None:
+            _EPHEMERAL_CLIENT = chromadb.EphemeralClient(settings=ChromaSettings(anonymized_telemetry=False))
+        return _EPHEMERAL_CLIENT
+
+    try:
+        return chromadb.HttpClient(
+            host=settings.chroma_host,
+            port=settings.chroma_port,
+            settings=ChromaSettings(anonymized_telemetry=False),
+        )
+    except Exception as exc:
+        if getattr(settings, "chroma_host", "") in ("localhost", "127.0.0.1"):
+            log.warning("Could not connect to Chroma at %s:%s (%s), falling back to EphemeralClient", settings.chroma_host, settings.chroma_port, exc)
+            if _EPHEMERAL_CLIENT is None:
+                _EPHEMERAL_CLIENT = chromadb.EphemeralClient(settings=ChromaSettings(anonymized_telemetry=False))
+            return _EPHEMERAL_CLIENT
+        raise
 
 
 def store(chunks: list[Chunk], vectors: list[list[float]], settings: IndexerSettings) -> int:

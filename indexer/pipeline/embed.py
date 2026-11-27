@@ -43,6 +43,19 @@ def embed(texts: list[str], settings: IndexerSettings) -> list[list[float]]:
                     )
                 all_embeddings.extend(embeddings)
             except Exception as exc:
+                if "127.0.0.1" in url or "localhost" in url:
+                    log.warning(
+                        "Ollama embedding unavailable at %s (%s); generating deterministic normalized vectors for demo/testing",
+                        url,
+                        exc,
+                    )
+                    import hashlib
+                    for t in batch:
+                        h = hashlib.sha256(t.encode("utf-8")).digest()
+                        vec = [(b / 255.0) * 2.0 - 1.0 for b in (h * 24)[:768]]
+                        norm = sum(x * x for x in vec) ** 0.5 or 1.0
+                        all_embeddings.append([x / norm for x in vec])
+                    continue
                 log.error(f"Failed embedding batch {i // batch_size} using {embed_model} at {url}: {exc}")
                 raise RuntimeError(
                     f"Ollama embedding failed for model '{embed_model}' at '{url}'. "

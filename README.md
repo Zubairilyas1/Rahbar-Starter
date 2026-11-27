@@ -64,7 +64,111 @@ flowchart TD
 
 ---
 
-## 3. Quickstart: Clean Clone to Answered Question
+## 3. Assignment 03: RAGOps Commands & Reproduction Guide
+
+This repository implements the complete operational lifecycle described in **Xu et al. (2026)** (*RAGOps: Operating and Managing Retrieval-Augmented Generation Pipelines*). Use the exact commands below to run, verify, and evaluate each part (A through F):
+
+### Part A: Data Management — Verification & Incremental Ingestion (Paper §4.2.1–4.2.4)
+- **A1. Pre-Chunking Document Verification (Quality, Completeness, Recency, Uniqueness):**
+  ```bash
+  # Execute verification on Batch B (contains 6 planted defects, auto-quarantines failed docs)
+  python scripts/run_verification.py --corpus corpus/batch_b
+  # Result report: eval/results/verification_report_batch_b.json
+  ```
+- **A2. Incremental Update & 0-Chunk Guarantee Demo:**
+  ```bash
+  # Demonstrates: 0 chunks re-embedded on unchanged corpus, clean chunk replacement on edit,
+  # zero orphan chunks upon document deletion, and version archiving & rollback
+  python scripts/demo_incremental.py
+  ```
+
+### Part B: Decoupled Three-Level Offline Evaluation Suite (Paper §4.2.5, Table 1)
+- **Golden Set Benchmark (`eval/golden.jsonl`):** 32 curated evaluation queries (21 answerable with ground-truth docs/pages, 5 unanswerable requiring honest abstention, 6 hard multi-chunk/adversarial queries; 20 human-authored, 12 synthetic).
+- **Run the Complete 3-Level Evaluation Suite (Module, Component, End-to-End):**
+  ```bash
+  python eval/test_three_levels.py --golden eval/golden.jsonl --output eval/results/three_level_eval.json
+  ```
+  - **Level 1 (Module / Embedding):** Paraphrase vs. unrelated cosine similarity gap (0.4357), embedding latency, determinism ($\Delta = 0.0$).
+  - **Level 2 (Component / Retrieval):** Recall@3, Recall@5, MRR, nDCG@5, and noise robustness test.
+  - **Level 3 (End-to-End / Answer Generation):** Faithfulness, citation validity, abstention correctness, P50 & P95 latencies.
+
+### Part C: Change Experiment & Continuous Release Gate (Paper §4.1(d), §4.2.5–4.2.6)
+- **C1. Controlled Pipeline Change Experiment:**
+  ```bash
+  # Evaluates Candidate A (tuned chunk_size=350, overlap=60, top_k=5) against baseline
+  python scripts/run_release_experiment.py
+  ```
+- **C2. Continuous Integration Release Gate:**
+  ```bash
+  # Run release gate against passing Candidate A (Exit Code 0: APPROVED)
+  python eval/release_gate.py --candidate eval/results/candidate_tuned_eval.json
+
+  # Run release gate against deliberately degraded Candidate B (Exit Code 1: REJECTED)
+  python eval/release_gate.py --candidate eval/results/candidate_degraded_eval.json
+  ```
+
+### Part D: Observability, Traceability & Automated Diagnosis (Paper §3.2.3, §5.1, Table 2)
+- **D1 & D2. Structured CLI Trace Inspector:**
+  ```bash
+  # Reconstruct exact context, system prompt, citations, and stage latencies for any trace ID
+  python traces/inspect.py trace_001
+  ```
+- **D3. Operational Metrics Summary:**
+  ```bash
+  # Computes Top-1 retrieval similarity distribution, cache hit rate, abstention rate, P95 latency per stage
+  python traces/metrics_summary.py --window 24h
+  ```
+- **D4. Guardrail Logging:**
+  - Automated detection of prompt injection attacks (tested against Batch B `doc10`) and relevance floor fallback.
+- **D5. Root-Cause Diagnosis from Trace Only:**
+  ```bash
+  # Pinpoint why a query failed or abstained purely using JSON trace provenance
+  python traces/diagnose.py trace_002
+  ```
+
+### Part E: Drift & Golden Set Coverage Expansion (Paper §5.1)
+- **E1 & E2. Query Coverage Checker:**
+  ```bash
+  # Evaluates live query clustering against benchmark golden set
+  python eval/check_coverage.py --golden eval/golden.jsonl
+  ```
+- **E4. Close the Gap (Coverage Recovery):**
+  - Expanded golden set by +6 targeted operational test cases, raising query coverage from 71.9% to 87.5% (+15.6% gain).
+
+### Part F: Kubernetes Deployment & Controlled Release (Paper §4.1(e)-(f), §5.1)
+- **F1. Deploy Base Cluster Infrastructure:**
+  ```bash
+  kubectl apply -k k8s/base
+  ```
+- **F2. Ingestion and Evaluation as Kubernetes Jobs:**
+  ```bash
+  # Ingestion Job (sole writer to vector store)
+  kubectl apply -f k8s/base/indexer-job.yaml
+
+  # In-Cluster Release Evaluation Job (fails pod container if gate criteria not met)
+  kubectl apply -f k8s/base/eval-job.yaml
+  ```
+- **F3. Zero-Downtime Rolling Update & Rollback:**
+  ```bash
+  # Watch zero-downtime rolling update (maxUnavailable: 0)
+  kubectl rollout status deployment/api -n rahbar
+
+  # Trigger instant rollback on detected failure
+  kubectl rollout undo deployment/api -n rahbar
+  ```
+- **F4. Cluster Observability & Log Streaming:**
+  ```bash
+  kubectl logs -l app=api -n rahbar -c api -f
+  kubectl port-forward svc/api 8000:8000 -n rahbar
+  ```
+
+### Part G: Master Report & Evaluation Artifacts
+- Formal 8-page academic report with uncropped terminal appendix: [`docs/Assignment_03_RAGOps_Master_Report.pdf`](docs/Assignment_03_RAGOps_Master_Report.pdf)
+- Visual architecture and operational roadmap: [`docs/Assignment_03_RAGOps_Master_Roadmap.pdf`](docs/Assignment_03_RAGOps_Master_Roadmap.pdf)
+
+---
+
+## 4. Quickstart: Clean Clone to Answered Question
 
 Follow this linear sequence to bootstrap the cluster, apply manifests in exact order, run the indexer, and query RAHBAR.
 
