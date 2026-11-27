@@ -26,6 +26,7 @@ class Passage(BaseModel):
     section: str
     page: int | None = None
     score: float = Field(description="Similarity, higher is closer (1 - cosine distance).")
+    doc_version: str = "unknown"
 
 
 class Citation(BaseModel):
@@ -52,6 +53,20 @@ class RetrievedRef(BaseModel):
     section: str
     page: int | None = None
     score: float
+    doc_version: str = "unknown"
+
+
+class RetrievedPassage(RetrievedRef):
+    """A retrieved chunk with its text, returned by POST /api/retrieve (evaluation only)."""
+
+    text: str
+
+
+class RetrieveResponse(BaseModel):
+    request_id: str
+    collection: str
+    filters_applied: dict[str, object]
+    passages: list[RetrievedPassage]
 
 
 class AskResponse(BaseModel):

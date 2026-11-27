@@ -6,6 +6,7 @@ Enforces never-cache rules for follow-up turns and abstentions.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -45,6 +46,9 @@ class SemanticCache:
         self.settings = settings
         self.threshold = settings.cache_threshold
         self._client: Any = None
+        # Keyed per collection: a candidate Deployment (own collection) must never be
+        # served answers cached by the live one. The indexer still flushes rahbar:cache:*.
+        self._prefix = f"rahbar:cache:{settings.collection}:"
 
     @property
     def client(self) -> Any:
@@ -73,7 +77,7 @@ class SemanticCache:
             return None
 
         try:
-            keys = r.keys("rahbar:cache:*")
+            keys = r.keys(self._prefix + "*")
             best_score = -1.0
             best_entry: dict[str, Any] | None = None
 
@@ -133,7 +137,7 @@ class SemanticCache:
             return
 
         try:
-            cache_key = f"rahbar:cache:{hash(question)}"
+            cache_key = self._prefix + hashlib.sha256(question.encode("utf-8")).hexdigest()[:16]
             payload = {
                 "question": question,
                 "vector": query_vector,

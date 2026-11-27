@@ -62,6 +62,10 @@ class HostedProvider:
             "Respond strictly in JSON matching the schema."
         )
 
+    def render_prompt(self, question: str, passages: list[Passage]) -> str:
+        """The exact messages sent to the model, as one string, for the trace (D1/D2)."""
+        return f"[system]\n{SYSTEM_PROMPT}\n[user]\n{self._build_prompt(question, passages)}"
+
     def generate(self, question: str, passages: list[Passage]) -> Answer:
         prompt = self._build_prompt(question, passages)
         base = self.settings.hosted_base_url.rstrip("/")
@@ -80,6 +84,7 @@ class HostedProvider:
                 {"role": "user", "content": prompt},
             ],
             "temperature": self.settings.temperature,
+            "seed": self.settings.llm_seed,
         }
 
         # Attempt call with retry on validation error

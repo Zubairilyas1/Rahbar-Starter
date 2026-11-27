@@ -32,6 +32,12 @@ class Settings:
     chroma_host: str = "chroma"
     chroma_port: int = 8000
     collection: str = "rahbar"
+    # Release provenance written into every trace (Assignment 03 D1/F3). These are
+    # set on the Deployment's pod template, so a rollout (and a rollout undo)
+    # changes them and the next trace shows which collection/embedding served it.
+    collection_version: str = "v1"
+    embed_version: str = "v1.5"
+    pipeline_version: str = "baseline"
 
     # Retrieval and grounding
     top_k: int = 5
@@ -39,6 +45,7 @@ class Settings:
     temperature: float = 0.2
     llm_model: str = "llama3.2:3b"
     llm_timeout: float = 30.0
+    llm_seed: int = 42                # LLM_SEED: fixed sampling seed (Part B stochasticity)
     ollama_url: str = "http://host.minikube.internal:11434"
     hosted_base_url: str = ""        # e.g. an OpenAI-compatible endpoint
     llm_api_key: str = field(default="", repr=False)   # from the Secret; never log it
@@ -59,11 +66,15 @@ def get_settings() -> Settings:
         chroma_host=os.environ.get("CHROMA_HOST", "chroma"),
         chroma_port=_int("CHROMA_PORT", 8000),
         collection=os.environ.get("CHROMA_COLLECTION", "rahbar"),
+        collection_version=os.environ.get("COLLECTION_VERSION", "v1"),
+        embed_version=os.environ.get("EMBED_VERSION", "v1.5"),
+        pipeline_version=os.environ.get("PIPELINE_VERSION", "baseline"),
         top_k=_int("TOP_K", 5),
         relevance_floor=_float("RELEVANCE_FLOOR", 0.50),
         temperature=_float("TEMPERATURE", 0.2),
         llm_model=os.environ.get("LLM_MODEL", "llama3.2:3b"),
         llm_timeout=_float("LLM_TIMEOUT", 30.0),
+        llm_seed=_int("LLM_SEED", 42),
         ollama_url=os.environ.get("OLLAMA_URL", "http://host.minikube.internal:11434"),
         hosted_base_url=os.environ.get("HOSTED_BASE_URL", ""),
         llm_api_key=os.environ.get("LLM_API_KEY", ""),
