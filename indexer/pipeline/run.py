@@ -69,19 +69,137 @@ def run_pipeline(settings: IndexerSettings) -> int:
     from .clean import clean
     from .embed import embed
     from .extract import extract
-    from .store import store
+    from .incremental import (
+        IngestionState,
+        compute_file_hash,
+        diff_corpus,
+        get_chunks_by_document,
+        purge_document_chunks,
+    )
+    from .store import get_client, store
+    from .verify import verify_and_quarantine
 
-    documents = discover(settings.corpus_dir)
-    if not documents:
+    corpus_path = Path(settings.corpus_dir)
+    discovered = discover(settings.corpus_dir)
+    if not discovered:
         raise SystemExit(f"no documents found in {settings.corpus_dir}")
-    all_chunks: list[Chunk] = []
-    for path, doc_version, superseded in documents:
-        doc = clean(extract(str(path), doc_version, superseded))
-        pieces = chunk(doc, settings.chunk_size, settings.chunk_overlap)
-        log("chunked", source=path.name, chunks=len(pieces))
-        all_chunks.extend(pieces)
-    vectors = embed([c.text for c in all_chunks], settings)
-    return store(all_chunks, vectors, settings)
+
+    client = get_client(settings)
+    state_file = corpus_path / ".ingestion_state.json"
+    state = IngestionState.load(state_file)
+
+    # 1. Incremental Diff against current disk state
+    new_docs, modified_docs, unchanged_sources, deleted_sources = diff_corpus(discovered, state)
+    log(
+        "incremental_diff",
+        new=len(new_docs),
+        modified=len(modified_docs),
+        unchanged=len(unchanged_sources),
+        deleted=len(deleted_sources),
+    )
+
+    # 2. Handle deleted documents: purge all chunks to prevent orphans
+    for deleted_src in deleted_sources:
+        purged = purge_document_chunks(
+            deleted_src,
+            client,
+            settings.collection,
+            state.documents.get(deleted_src, {}).get("chunk_ids"),
+        )
+        del state.documents[deleted_src]
+        log("purged_deleted_document", source=deleted_src, chunks_removed=purged)
+
+    # 3. Check for 0-chunk re-run guarantee
+    docs_to_process = new_docs + modified_docs
+    if not docs_to_process and not deleted_sources:
+        current_counts = get_chunks_by_document(client, settings.collection)
+        total_existing = sum(current_counts.values())
+        log(
+            "incremental_update_complete",
+            embedded_chunks=0,
+            status="unchanged",
+            message="Corpus unchanged: embedded zero chunks.",
+            total_collection_chunks=total_existing,
+        )
+        return total_existing
+
+    # 4. Handle modified documents: purge old chunks before re-embedding
+    for path, _, _ in modified_docs:
+        src = path.name
+        purged = purge_document_chunks(
+            src,
+            client,
+            settings.collection,
+            state.documents.get(src, {}).get("chunk_ids"),
+        )
+        log("purged_modified_document_chunks", source=src, chunks_removed=purged)
+
+    # 5. Extract and Verify only incoming/modified documents
+    extracted_candidates = []
+    for path, doc_version, superseded in docs_to_process:
+        meta = _front_matter(path) if path.suffix.lower() == ".md" else {}
+        if "doc_version" not in meta:
+            meta["doc_version"] = doc_version
+        if "source" not in meta:
+            meta["source"] = path.name
+        doc = extract(str(path), doc_version, superseded)
+        extracted_candidates.append((doc, path, meta))
+
+    passed_docs, v_report = verify_and_quarantine(
+        extracted_candidates,
+        quarantine_dir=corpus_path / "quarantine",
+        report_path=Path("eval/results") / f"verification_report_{corpus_path.name}.json",
+    )
+    log(
+        "verification_stage_complete",
+        total_examined=len(extracted_candidates),
+        passed=len(passed_docs),
+        quarantined=v_report.quarantined_documents,
+    )
+
+    if not passed_docs:
+        log("no_documents_passed_verification", quarantined=v_report.quarantined_documents)
+        state.save(state_file)
+        return 0
+
+    # 6. Clean, Chunk and Embed only verified passed documents
+    new_chunks: list[Chunk] = []
+    chunks_per_doc: dict[str, list[str]] = {}
+
+    for doc in passed_docs:
+        cleaned_doc = clean(doc)
+        pieces = chunk(cleaned_doc, settings.chunk_size, settings.chunk_overlap)
+        log("chunked", source=doc.source, chunks=len(pieces))
+        new_chunks.extend(pieces)
+        chunks_per_doc[doc.source] = [p.id for p in pieces]
+
+    if not new_chunks:
+        state.save(state_file)
+        return 0
+
+    vectors = embed([c.text for c in new_chunks], settings)
+    stored_count = store(new_chunks, vectors, settings)
+
+    # 7. Update persistent ingestion state
+    for path, doc_version, superseded in docs_to_process:
+        src = path.name
+        if src in chunks_per_doc:
+            state.documents[src] = {
+                "content_hash": compute_file_hash(path),
+                "chunk_ids": chunks_per_doc[src],
+                "doc_version": doc_version,
+                "superseded": superseded,
+                "last_modified": path.stat().st_mtime if path.exists() else time.time(),
+                "chunk_count": len(chunks_per_doc[src]),
+            }
+
+    state.save(state_file)
+    log(
+        "incremental_update_complete",
+        embedded_chunks=len(new_chunks),
+        updated_documents=len(passed_docs),
+    )
+    return stored_count
 
 
 def main() -> int:

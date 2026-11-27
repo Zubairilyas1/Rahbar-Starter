@@ -1,0 +1,52 @@
+[
+  {
+    "file": "doc01-campus-wifi-policy-2026.md",
+    "doc_version": "2026-09",
+    "superseded": false
+  },
+  {
+    "file": "doc02-library-digital-resources-2026.md",
+    "doc_version": "2026-09",
+    "superseded": false
+  },
+  {
+    "file": "doc03-sports-complex-regulations-2026.md",
+    "doc_version": "2026-09",
+    "superseded": false
+  },
+  {
+    "file": "doc04-campus-wifi-policy-duplicate.md",
+    "doc_version": "2026-09",
+    "superseded": false
+  },
+  {
+    "file": "doc05-sports-complex-duplicate.md",
+    "doc_version": "2026-09",
+    "superseded": false
+  },
+  {
+    "file": "doc06-campus-wifi-policy-draft-neardup.md",
+    "doc_version": "2026-09",
+    "superseded": false
+  },
+  {
+    "file": "doc07-hostel-allotment-corrupted.md",
+    "doc_version": "2026-09",
+    "superseded": false
+  },
+  {
+    "file": "doc08-unlabeled-cafeteria-guidelines.md",
+    "doc_version": "unknown",
+    "superseded": false
+  },
+  {
+    "file": "doc09-campus-wifi-policy-2024-outdated.md",
+    "doc_version": "2024-01",
+    "superseded": true
+  },
+  {
+    "file": "doc10-student-portal-guidelines-injected.md",
+    "doc_version": "2026-09",
+    "superseded": false
+  }
+]
