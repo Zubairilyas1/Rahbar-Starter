@@ -9,7 +9,6 @@ and golden questions to identify coverage gaps and topic drift.
 import argparse
 import json
 import math
-import sys
 import urllib.request
 from collections import defaultdict
 from pathlib import Path

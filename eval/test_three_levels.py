@@ -21,13 +21,11 @@ Outputs a timestamped summary file in eval/results/.
 import argparse
 import json
 import math
-import os
 import random
 import re
 import sys
 import time
 import urllib.request
-from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -300,7 +298,7 @@ def run_e2e_level_tests(golden_file: Path, api_url: str = "http://localhost:8080
             )
             with urllib.request.urlopen(req, timeout=20.0) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
-        except Exception as e:
+        except Exception:
             # Fallback mock for testing
             resp_data = {
                 "answer": item.get("expected_answer", ""),
