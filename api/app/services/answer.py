@@ -262,7 +262,7 @@ def answer_question(
     latencies["total_ms"] = round((time.perf_counter() - t_start) * 1000.0, 2)
 
     # Reconstruct prompt for trace provenance
-    assembled_prompt = f"System: You are RAHBAR. Answer from passages only.\n\nPassages:\n"
+    assembled_prompt = "System: You are RAHBAR. Answer from passages only.\n\nPassages:\n"
     for i, p in enumerate(passages, 1):
         assembled_prompt += f"[{i}] {p.source} (p.{p.page}): {p.text[:200]}...\n"
     assembled_prompt += f"\nQuestion: {q}"
