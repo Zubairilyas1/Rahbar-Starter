@@ -80,5 +80,5 @@ The shipped configuration produces an amplification ratio of approximately **1.1
     "hnsw:space": "cosine"
   }
   ```
-- **Similarity Threshold**: Query similarity is calculated as $1 - \text{cosine distance}$. The relevance floor is set to `0.35` to admit valid factual queries while triggering deterministic abstention on out-of-corpus queries.
+- **Similarity Threshold**: Query similarity is calculated as $1 - \text{cosine distance}$. The relevance floor is set to `0.50` to trigger abstention on out-of-corpus queries.
 - **Resource Profiling**: The committed `kubectl top pods` capture was taken after the dummy indexer Job completed, so it does not establish a real-corpus indexer peak. The Job limit is `768Mi`; a measured OCR and embedding peak still requires sampling the Job while it runs on the real corpus (see `docs/evidence/README.md`). Under local testing, batch embedding peaks at ~280m CPU and ~410Mi memory.

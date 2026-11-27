@@ -1,0 +1,278 @@
+{
+  "timestamp": "2026-11-23T08:51:38Z",
+  "total_documents": 9,
+  "passed_documents": 7,
+  "quarantined_documents": 2,
+  "results": [
+    {
+      "source": "undergraduate-academic-rules-aug-2023.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: current active version or no newer conflict"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: content is novel and distinct"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "b7cad3409c04aa0844df36cf0c75b83c61c8c6ff1cc03d6320f10e0637b1b109",
+      "doc_version": "2023-08"
+    },
+    {
+      "source": "academic-rules-handbook-jun-2026.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: current active version or no newer conflict"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: content is novel and distinct"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "9edbfec96e9c04fd0372fce870e2e393a25d2e6569a06d709f0fe424b47f7588",
+      "doc_version": "2026-06"
+    },
+    {
+      "source": "prospectus-2026-academic-rules-and-regulations.pdf",
+      "passed": false,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": false,
+          "reason": "Document appears truncated mid-sentence: ends with 'Regulations' without punctuation"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: current active version or no newer conflict"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: content is novel and distinct"
+        }
+      ],
+      "quarantined": true,
+      "quarantine_path": "corpus\\quarantine\\prospectus-2026-academic-rules-and-regulations.pdf",
+      "hash_sha256": "1e499fe1361fe2e4994544c2d4478c12763951ffc0ffd3a4f8b827d993ebf647",
+      "doc_version": "2026"
+    },
+    {
+      "source": "student-handbook-jun-2026.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: current active version or no newer conflict"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: content is novel and distinct"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "2582187934aa8780e50d348f3dac19f7efe1dc68245a207e2d51fe4798c5d73b",
+      "doc_version": "2026-06"
+    },
+    {
+      "source": "annual-report-2019-20.pdf",
+      "passed": false,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": false,
+          "reason": "Missing required metadata fields: title"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: current active version or no newer conflict"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: content is novel and distinct"
+        }
+      ],
+      "quarantined": true,
+      "quarantine_path": "corpus\\quarantine\\annual-report-2019-20.pdf",
+      "hash_sha256": "f25643b2df3066645b168264a9439bc7260335b79fd74f2bc0e0a28135fccc5f",
+      "doc_version": "2019-20"
+    },
+    {
+      "source": "annual-report-2023-24.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: current active version or no newer conflict"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: content is novel and distinct"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "57c486be6dd416286a0a1e0956bea39e27b12617f5ae4934c3c05f81534fded4",
+      "doc_version": "2023-24"
+    },
+    {
+      "source": "fee-structure-page.html",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: current active version or no newer conflict"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: content is novel and distinct"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "23596a2b9af4a6ae8ea9f8f594eb3692560cf0eb7dcff098308b8e88e9d49311",
+      "doc_version": "2026-27"
+    },
+    {
+      "source": "grading-page.html",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: current active version or no newer conflict"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: content is novel and distinct"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "6de3bb2bbdf4fa65d5046780dfd362487ff4f4d60eb2e07835dd3939c9601817",
+      "doc_version": "2026"
+    },
+    {
+      "source": "faculty-entrepreneurship-and-technical-start-ups-policy.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: current active version or no newer conflict"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: content is novel and distinct"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "015a881970aea5c4ed7ce704bb440655b0594c92cde287eb12f6743299004f9f",
+      "doc_version": "2022-05"
+    }
+  ]
+}

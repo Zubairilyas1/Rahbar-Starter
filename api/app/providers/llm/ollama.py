@@ -92,50 +92,7 @@ class OllamaProvider:
                     data = resp.json()
                     content = data.get("message", {}).get("content", "{}")
                     parsed = json.loads(content)
-                    if isinstance(parsed, dict):
-                        if "citations" not in parsed or not isinstance(parsed["citations"], list):
-                            parsed["citations"] = []
-                        if "answered_from_context" not in parsed:
-                            parsed["answered_from_context"] = bool(parsed.get("citations"))
-                        if "confidence" not in parsed or parsed["confidence"] not in ("high", "medium", "low"):
-                            parsed["confidence"] = "high" if parsed.get("citations") else "low"
-                        if "reasoning" not in parsed:
-                            parsed["reasoning"] = ""
-                        if "answer" not in parsed:
-                            parsed["answer"] = ""
-                    ans = Answer.model_validate(parsed)
-                    # Align flags if model answered factually with valid citations
-                    abstention_indicators = (
-                        "do not have sufficient",
-                        "insufficient information",
-                        "do not provide sufficient",
-                        "not explicitly stated",
-                        "not explicitly mentioned",
-                        "no direct answer",
-                        "unable to answer",
-                        "not mentioned",
-                        "not provided",
-                        "not sufficient",
-                        "cannot answer",
-                        "no information",
-                        "not covered",
-                        "not found",
-                    )
-                    is_abstain = any(w in ans.answer.lower() for w in abstention_indicators)
-                    if is_abstain:
-                        ans.answered_from_context = False
-                        ans.confidence = "low"
-                        ans.citations = []
-                    else:
-                        if not ans.citations and passages:
-                            from ...schemas import Citation
-                            ans.citations = [
-                                Citation(source=passages[0].source, section=passages[0].section, page=passages[0].page)
-                            ]
-                        ans.answered_from_context = True
-                        if ans.confidence == "low":
-                            ans.confidence = "high"
-                    return ans
+                    return Answer.model_validate(parsed)
             except (ValidationError, json.JSONDecodeError) as val_err:
                 log.warning(f"Ollama generation validation error (attempt {attempt + 1}): {val_err}")
                 if attempt == 0:
