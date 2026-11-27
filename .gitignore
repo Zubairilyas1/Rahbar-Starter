@@ -10,9 +10,14 @@ kubeconfig
 
 # Corpus files you did not write: commit corpus/MANIFEST.md and corpus/fetch.py instead
 corpus/raw/
+corpus/quarantine/
+corpus/archive/
 
 # Assignment specs, zips and scratch extractions
 *.pdf
+!docs/*.pdf
+docs/*Master_Demo_and_Viva_Guide*.pdf
+scripts/generate_ragops_master_demo_guide.py
 *.zip
 pdf_extracted_text.txt
 rahbar-starter/
