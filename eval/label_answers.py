@@ -39,7 +39,7 @@ def main() -> int:
     result_path = Path(args.result)
     result = json.loads(result_path.read_text(encoding="utf-8"))
     per_q = result["runs"][0]["per_question"]
-    golden = {json.loads(l)["id"]: json.loads(l) for l in Path(args.golden).read_text(encoding="utf-8").splitlines() if l.strip()}
+    golden = {json.loads(line)["id"]: json.loads(line) for line in Path(args.golden).read_text(encoding="utf-8").splitlines() if line.strip()}
 
     labels_path = Path(args.labels)
     labels = {}
