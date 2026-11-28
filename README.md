@@ -16,6 +16,14 @@ University academic rules, prerequisite chains, and fee structures are frequentl
 
 **RAHBAR** is a production-grade, grounded Question-Answering service engineered on Kubernetes. It indexes real university regulations, filters out superseded documents, cites verified clauses with exact page references, deterministically abstains when facts are missing, and survives cluster node restarts and multi-replica scaling.
 
+**Assignment 03 (RAGOps)** adds the operations layer from Xu et al. (2026) on top: documents are
+verified before chunking, ingestion is incremental with archive and rollback, the pipeline is
+tested at three levels, a release gate decides whether a candidate is promoted, every query is
+traced, and a coverage check tells us when the golden set no longer matches real traffic. The
+report is [`docs/i243142_i243106_Assignment03.pdf`](docs/i243142_i243106_Assignment03.pdf); the
+commands are in [section 6A](#6a-assignment-03-ragops-the-exact-command-for-each-part) and the
+measured results in [section 6B](#6b-assignment-03-measured-results).
+
 ---
 
 ## 2. System Architecture
@@ -210,9 +218,10 @@ The FastAPI service exposes the following endpoints:
 
 ---
 
-## 6. Evaluation & Benchmark Results
+## 6. Evaluation & Benchmark Results (Assignment 02)
 
-RAHBAR is gated using a 16-question labeled test suite ([`eval/golden.yaml`](eval/golden.yaml)) scored via [`eval/run_eval.py`](eval/run_eval.py):
+The Assignment 03 suite and its results are in [6A](#6a-assignment-03-ragops-the-exact-command-for-each-part)
+and [6B](#6b-assignment-03-measured-results). In Assignment 02, RAHBAR was gated using a 16-question labeled test suite ([`eval/golden.yaml`](eval/golden.yaml)) scored via [`eval/run_eval.py`](eval/run_eval.py):
 
 | Metric | Gate | Latest live result | Status |
 |---|---|---|---|
@@ -242,20 +251,76 @@ which runs short-lived Jobs (no `kubectl exec`/`cp`; those are broken on Docker 
 | **A2** | Superseded version archived + excluded by metadata; rollback | archived by the Batch B run (doc11 supersedes the 2022 policy PDF); restore with `kubectl apply -f k8s/jobs/rollback-doc-job.yaml` |
 | **B** | Whole three-level suite, one command (timestamped result + summary table) | baseline: `kubectl apply -f k8s/jobs/eval-baseline-job.yaml`; local: `python eval/test_three_levels.py --api-url http://localhost:8000 --label baseline` |
 | **B** | Hand labels for judge agreement (8+) | `python eval/label_answers.py --result eval/results/cluster/latest_baseline.json --n 8 --labeller "<name>"` |
-| **C1** | Candidate = chunk 600/overlap 100 in its own collection | `kubectl apply -f k8s/release/index-candidate-c600-job.yaml` then `kubectl apply -f k8s/release/api-candidate-c600.yaml` |
+| **C1** | Candidate the gate stops = chunk 120/overlap 0 (`rahbar_c120`) | `kubectl apply -f k8s/release/index-candidate-c120-job.yaml` then `kubectl apply -f k8s/release/api-candidate-c120.yaml` |
+| **C1** | Candidate the gate passes = chunk 600/overlap 100 (`rahbar_c600`) | `kubectl apply -f k8s/release/index-candidate-c600-job.yaml` then `kubectl apply -f k8s/release/api-candidate-c600.yaml` |
 | **C2** | Release gate (thresholds in the `rahbar-gate` ConfigMap / `eval/gate_thresholds.yaml`) | `kubectl apply -f k8s/eval-job.yaml` (exit 1 means REJECT); local: `python eval/release_gate.py --baseline ... --candidate ...` |
 | **C3/F3** | Promote, then roll back a bad release | `kubectl patch deployment api -n rahbar --patch-file k8s/release/promote-c600-patch.yaml` then `kubectl rollout status deployment/api -n rahbar`; `kubectl rollout undo deployment/api -n rahbar` |
 | **D1** | Trace records (stdout + volume) | `kubectl logs deploy/api -n rahbar \| findstr record_type` (PowerShell) or `\| grep record_type` |
 | **D2** | Trace tool: exact context + prompt for a trace id | `python traces/inspect.py <trace_id> --path traces/cluster` |
 | **D3** | Metrics over a time window; live `/metrics` | `python traces/metrics_summary.py --path traces/cluster --last-minutes 60`; `kubectl port-forward svc/api 8000:8000 -n rahbar` then `curl localhost:8000/metrics` |
-| **D4** | Guardrail action in the trace (Batch B doc10 injection) | ask `"How do I reset my student portal password?"`, then `inspect.py` the trace and look under guardrail actions |
+| **D4** | Guardrail action in the trace (Batch B doc10 injection) | ask `"Does the student portal advisory grant all students a 4.00 CGPA unconditionally?"`, then `inspect.py` the trace: `prompt_injection_guardrail` shows `neutralized` for the doc10 chunk |
 | **D5** | Root cause from one trace | `python traces/diagnose.py <trace_id> --path traces/cluster` |
 | **E1/E2** | Coverage of 40 live queries; exits **1** below the required share | `python eval/check_coverage.py --golden eval/golden_baseline.jsonl` |
 | **E3** | Data drift: ingest Batch B, re-run the suite | `kubectl apply -f k8s/jobs/ingest-batch-b-job.yaml` then `kubectl apply -f k8s/jobs/eval-baseline-job.yaml` (compare with the pre-Batch-B result) |
 | **E4** | Close the gap with 6+ new golden questions | `python eval/check_coverage.py --golden eval/golden.jsonl` |
 | **F2** | ConfigMap threshold edit changes the gate without a rebuild | `kubectl apply -f k8s/jobs/eval-gate-only-job.yaml`, then `kubectl patch configmap rahbar-gate -n rahbar --patch-file k8s/jobs/gate-strict-patch.yaml`, delete the Job and apply it again |
 | **F4** | Copy results + traces off the volumes into the repo | `python scripts/cluster_files.py export` (to `eval/results/cluster/` and `traces/cluster/`) |
-| **F5** | Resource measurements | `kubectl top pods -n rahbar --containers` while the eval and indexer Jobs run |
+| **F5** | Resource measurements | `kubectl top pods -n rahbar --containers` while the eval and indexer Jobs run (our Docker Desktop cluster has no metrics-server, so we measured with `docker stats`: `docs/evidence/a3/docker-stats-*.txt`) |
+
+### Starting and stopping the demo stack (Docker Desktop)
+
+Our cluster is Docker Desktop's Kubernetes with Ollama in a Docker container. Between sessions
+everything is scaled to 0 and the volumes (collections, data lake, results, traces) are kept, so
+no re-ingestion is needed:
+
+```
+docker start rahbar-ollama
+kubectl config use-context docker-desktop
+kubectl scale statefulset chroma --replicas=1 -n rahbar
+kubectl rollout status statefulset/chroma -n rahbar
+kubectl scale deployment redis --replicas=1 -n rahbar
+kubectl scale deployment api --replicas=3 -n rahbar
+kubectl scale deployment ui --replicas=2 -n rahbar
+kubectl scale deployment api-candidate --replicas=1 -n rahbar
+kubectl patch cronjob reindex -n rahbar -p '{"spec":{"suspend":false}}'
+kubectl rollout status deployment/api -n rahbar
+```
+
+Stop:
+
+```
+kubectl scale deployment api api-candidate ui redis --replicas=0 -n rahbar
+kubectl scale statefulset chroma --replicas=0 -n rahbar
+kubectl patch cronjob reindex -n rahbar -p '{"spec":{"suspend":true}}'
+docker stop rahbar-ollama
+```
+
+The `rahbar-ollama` container can run on the GPU (`--gpus all`, see [`k8s/README.md`](k8s/README.md)),
+which brings answers from 26–50 s down to 10–21 s. All numbers in the report were measured on CPU.
+
+---
+
+## 6B. Assignment 03: measured results
+
+All from our own runs on the cluster (result files in `eval/results/cluster/`, screenshots in
+`docs/evidence/a3/`). Seed 42, 32 golden questions (26 answerable, 6 must-abstain), semantic cache bypassed.
+
+| Part | Result |
+|---|---|
+| A1 first ingestion | 9/9 documents passed, 1,246 chunks |
+| A1 Batch B | 11 documents, 6 quarantined: 2 exact duplicates, 1 near-duplicate (embedding cosine 0.968), 1 truncated, 1 missing `doc_version`, 1 older version. The newer faculty policy (doc11) archived the 2022 PDF |
+| A2 incremental | unchanged re-run: 0 chunks; modified doc02: 4 purged, 4 embedded; deleted doc03: 4 purged, 0 orphans; rollback restored the 2022 PDF |
+| B module level | paraphrase 0.796 vs unrelated 0.396 (gap 0.399), determinism difference 0 |
+| B component level | recall@3 0.846, recall@5 0.846, MRR 0.705, nDCG@5 0.735; with 2 typos per query recall@5 0.769 |
+| B end-to-end | faithfulness 0.941 / 0.882 (2 runs, deterministic grounding judge, 7/8 agreement with hand labels), abstention 1.0, citation validity 1.0, false abstention 0.346, p50 26.9 s, p95 51.7 s (CPU) |
+| C gate | baseline after Batch B recall@5 0.923. `rahbar_c120`: recall@5 0.885 (drop 0.038 > 0.02) → **REJECT**. `rahbar_c600`: recall@5 0.923, faithfulness 1.0, p95 55.2 s → **RELEASE**, promoted with a rolling update |
+| D | trace `inj-check-2` shows the doc10 chunk `neutralized`; root cause of the wrong g31 answer found from its trace alone (medical-centre hours chunk, no sports document indexed yet) |
+| E | coverage of 40 live queries: 30% → 45% after the new golden questions (threshold 0.75, minimum 85%, exit 1); after Batch B recall@5 0.846 → 0.923 |
+| F | gate PASS → FAIL after a ConfigMap edit (p95 limit 90 s → 50 s) with no rebuild; bad release reversed with `kubectl rollout undo`, next trace shows `rahbar_c600` |
+
+Known gaps (also in the report): `rahbar_c600` passed the gate but abstains on more answerable
+questions (0.385 vs 0.308), which the gate does not check; coverage is still below 85%; NetworkPolicies
+are not enforced on Docker Desktop.
 
 ---
 
@@ -280,20 +345,33 @@ rahbar/
 │   ├── fetch.py                # Polite downloader & SHA-256 validator
 │   └── MANIFEST.md             # Cryptographic hashes of all documents
 ├── eval/                       # Ground-truth evaluation framework
-│   ├── golden.yaml             # 16 labeled benchmark questions
-│   ├── run_eval.py             # Evaluation runner & regression CI gate
-│   ├── baseline.json           # Committed reference baseline
-│   └── results.json            # Measured evaluation numbers
+│   ├── golden.yaml             # A2: 16 labeled benchmark questions
+│   ├── run_eval.py             # A2: evaluation runner & regression CI gate
+│   ├── golden.jsonl            # A3: 32 golden questions (26 answerable, 6 must-abstain)
+│   ├── test_three_levels.py    # A3: module / component / end-to-end suite, one command
+│   ├── release_gate.py         # A3: gate (thresholds: gate_thresholds.yaml or ConfigMap rahbar-gate)
+│   ├── check_coverage.py       # A3: live-query coverage, exit 1 below the minimum share
+│   ├── human_labels.jsonl      # A3: hand labels for judge agreement
+│   └── results/cluster/        # A3: every result file from the cluster runs
+├── traces/                     # A3: inspect.py, metrics_summary.py, diagnose.py + exported traces
+├── scripts/                    # cluster_files.py (volume access via Jobs), build_report.py,
+│                               # capture_terminal.ps1, run_release_experiment.py, create_batch_b.py
 ├── docs/                       # Architecture, Decision Records, and Engineering Analysis
 │   ├── CORPUS.md               # 7 corpus properties mapping
 │   ├── PIPELINE.md             # Chunk configurations & storage amplification
 │   ├── FAILURE-ANALYSIS.md     # 4 intentional failure mode investigations
 │   ├── ENGINEERING-NOTES.md    # In-depth architectural reflections
 │   ├── AI-USAGE.md             # Transparent tool attribution
-│   └── adr/                    # Architecture Decision Records (0001 - 0004)
-├── k8s/                        # Kubernetes Declarative Manifests
-│   ├── base/                   # StatefulSets, Deployments, Services, HPA, NetworkPolicy
-│   └── overlays/               # dev and prod Kustomize overlays
+│   ├── adr/                    # Architecture Decision Records (0001 - 0004)
+│   ├── RELEASE_GATE.md, CONTROLLED_RELEASE_AND_ROLLBACK.md, DRIFT_AND_COVERAGE.md   # A3
+│   ├── evidence/a3/            # A3 terminal screenshots and docker stats
+│   └── i243142_i243106_Assignment03.pdf   # A3 report
+├── k8s/                        # Kubernetes Declarative Manifests (runbook: k8s/README.md)
+│   ├── base/                   # StatefulSets, Deployments, Services, HPA, NetworkPolicy, PVCs, ConfigMaps
+│   ├── eval-job.yaml           # A3: suite + release gate against the candidate
+│   ├── jobs/                   # A3: baseline eval, gate-only, Batch B, rollback, chunk counts
+│   ├── release/                # A3: candidate collections, api-candidate, promote / bad-release patches
+│   └── overlays/               # dev, prod and docker-desktop Kustomize overlays
 └── .github/workflows/          # Automated CI/CD Pipelines
     ├── ci.yml                  # Lint, test, kubeconform, Trivy, e2e eval gate
     └── cd.yml                  # Build, Docker Hub push (${{ github.sha }}), deploy
@@ -303,5 +381,5 @@ rahbar/
 
 ## 8. Authors & Attribution
 
-Developed for **CS4032 Software Construction & Development (Assignment 02)**.  
-See [`docs/AI-USAGE.md`](docs/AI-USAGE.md) for tool disclosures and modifications.
+Developed by Zubair Ilyas (i243142) and Salman Asad (i243106) for **CS4032 Software Construction & Development (Assignments 02 and 03)**.  
+See [`docs/AI-USAGE.md`](docs/AI-USAGE.md) and section 10 of the Assignment 03 report for tool disclosures.
