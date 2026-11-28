@@ -66,6 +66,10 @@ class OllamaProvider:
             "Provide your grounded answer as a JSON object adhering to the schema."
         )
 
+    def render_prompt(self, question: str, passages: list[Passage]) -> str:
+        """The exact messages sent to the model, as one string, for the trace (D1/D2)."""
+        return f"[system]\n{SYSTEM_PROMPT}\n[user]\n{self._build_prompt(question, passages)}"
+
     def generate(self, question: str, passages: list[Passage]) -> Answer:
         prompt = self._build_prompt(question, passages)
         url = f"{self.settings.ollama_url.rstrip('/')}/api/chat"
@@ -79,6 +83,7 @@ class OllamaProvider:
             ],
             "options": {
                 "temperature": self.settings.temperature,
+                "seed": self.settings.llm_seed,
             },
             "stream": False,
         }

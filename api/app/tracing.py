@@ -61,6 +61,7 @@ class TraceRecord:
     embedding_version: str
     collection_name: str
     collection_version: str
+    pipeline_version: str
     retrieved_chunks: list[dict[str, Any]]
     filters_applied: dict[str, Any]
     reranked_order: list[str]
@@ -74,8 +75,11 @@ class TraceRecord:
     latency_per_stage: dict[str, float]
     cache_status: str  # "hit" | "miss"
 
+    def as_dict(self) -> dict[str, Any]:
+        return {"record_type": "trace", **asdict(self)}
+
     def to_json(self) -> str:
-        return json.dumps(asdict(self))
+        return json.dumps(self.as_dict(), ensure_ascii=False)
 
 
 def compute_prompt_hash(prompt_text: str) -> str:
@@ -86,8 +90,9 @@ def log_trace(record: TraceRecord, log_path: Path = DEFAULT_TRACE_LOG_PATH) -> N
     """Emits trace as structured JSON to stdout and appends to traces/live_traces.jsonl."""
     json_line = record.to_json()
     
-    # 1. Output to stdout (readable via kubectl logs)
-    print(f"TRACE: {json_line}", flush=True)
+    # 1. Output to stdout as one pure JSON line (F4: readable with `kubectl logs`,
+    #    filter with `| grep '"record_type": "trace"'`).
+    print(json_line, flush=True)
 
     # 2. Append to persistent trace log volume
     try:

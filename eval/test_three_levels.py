@@ -1,39 +1,49 @@
-"""Assignment 03 Part B: Offline Testing at Three Levels (Paper 4.2.5, Table 1).
+#!/usr/bin/env python3
+"""Assignment 03 Part B: offline testing at three levels (RAGOps paper 4.2.5, Table 1).
 
-Executes:
-1. Module Level: Embedding quality
-   - Mean cosine similarity for 15 paraphrase pairs vs 15 unrelated pairs, and the gap.
-   - Embedding time per chunk (ms).
-   - Determinism test: embedding the same text twice and reporting the max delta.
-2. Component Level: Retrieval quality
-   - Recall@3, Recall@5, MRR, nDCG@5 across the golden set.
-   - Noise test: query perturbations / typos, measuring degradation.
-3. End-to-End Level: Generation quality
-   - Faithfulness (LLM-as-judge calibrated against 8 human-labeled answers).
-   - Abstention correctness (100% on unanswerable queries).
-   - Citation validity percentage.
-   - Latency P50 and P95 (seconds).
-4. Stochasticity: Run twice with fixed random seeds, reporting metric variation.
+One command runs the whole suite against a running RAHBAR API and writes a
+timestamped result file plus a Markdown summary table to the results folder:
 
-Outputs a timestamped summary file in eval/results/.
+    python eval/test_three_levels.py --api-url http://localhost:8000 --label baseline
+
+Levels
+  1. Module (embedding): mean cosine of 15 paraphrase pairs vs 15 unrelated pairs and
+     the gap; embedding time per chunk (real chunks from the index); determinism
+     (embed the same text twice, largest absolute difference).
+  2. Component (retrieval): recall@3, recall@5, MRR, nDCG@5 against the golden
+     ground-truth document; then a noise test (seeded typos in every query) and the
+     change in each metric.
+  3. End-to-end (answers): faithfulness judged by an LLM against the retrieved context,
+     judge/human agreement on hand-labelled answers (eval/human_labels.jsonl),
+     abstention correctness on must-abstain questions, citation validity, p50/p95.
+  4. Stochasticity: seeds fixed (Python RNG, LLM seed and temperature on the API side);
+     the whole suite runs --repeat times (default 2) and every metric's difference
+     between run 1 and run 2 is reported.
+
+Nothing is mocked: if the API, Ollama or the judge cannot be reached the suite fails
+with exit code 2 instead of inventing numbers. The semantic cache is bypassed
+(X-RAGOps-No-Cache) so repeated runs measure the pipeline, not Redis.
 """
 
+from __future__ import annotations
+
 import argparse
+import hashlib
 import json
 import math
 import random
 import re
+import shutil
+import statistics
 import sys
 import time
-import urllib.request
 from pathlib import Path
 from typing import Any
 
-# Ensure project root is in sys.path
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+import httpx
 
-# Sample 15 paraphrase pairs
+HERE = Path(__file__).resolve().parent
+
 PARAPHRASE_PAIRS = [
     ("What CGPA is required to avoid academic warning?", "What is the minimum CGPA to stay off academic warning?"),
     ("What is the tuition fee per credit hour for BS CS?", "How much does one credit hour cost in BS CS tuition?"),
@@ -52,7 +62,6 @@ PARAPHRASE_PAIRS = [
     ("What is the maximum Turnitin similarity allowed for FYP thesis?", "What is the allowed plagiarism percentage threshold for final year projects?"),
 ]
 
-# Sample 15 unrelated pairs
 UNRELATED_PAIRS = [
     ("What CGPA is required to avoid academic warning?", "Where is the university swimming pool filtration plant located?"),
     ("What is the tuition fee per credit hour for BS CS?", "What are the dimensions of the badminton court in the sports complex?"),
@@ -71,361 +80,531 @@ UNRELATED_PAIRS = [
     ("What is the maximum Turnitin similarity allowed for FYP thesis?", "What is the bus schedule on Sunday afternoons?"),
 ]
 
+JUDGE_SYSTEM = (
+    "You check ONE thing: whether the facts stated in the ANSWER appear in the CONTEXT passages. "
+    "Do NOT judge whether the answer is complete or fully answers the QUESTION: a short answer "
+    "that states only facts found in the CONTEXT is grounded. Paraphrase is fine. "
+    "List every number, date, name, condition or rule in the ANSWER that the CONTEXT does not "
+    "contain or that the CONTEXT contradicts. If every fact appears in the CONTEXT, the list is empty. "
+    'Reply with JSON only: {"unsupported_facts": ["<fact>", ...], "reason": "<one sentence>"}'
+)
 
-def cosine_similarity(v1: list[float], v2: list[float]) -> float:
+
+class SuiteError(RuntimeError):
+    """The suite cannot measure honestly (service down, judge unavailable)."""
+
+
+# ----------------------------------------------------------------------- helpers
+def cosine(v1: list[float], v2: list[float]) -> float:
     dot = sum(a * b for a, b in zip(v1, v2))
-    norm1 = math.sqrt(sum(a * a for a in v1))
-    norm2 = math.sqrt(sum(b * b for b in v2))
-    if norm1 == 0 or norm2 == 0:
+    n1 = math.sqrt(sum(a * a for a in v1))
+    n2 = math.sqrt(sum(b * b for b in v2))
+    return dot / (n1 * n2) if n1 and n2 else 0.0
+
+
+def percentile(values: list[float], pct: float) -> float:
+    """Nearest-rank percentile (no interpolation): p95 of 32 values is the 31st."""
+    if not values:
         return 0.0
-    return dot / (norm1 * norm2)
+    ordered = sorted(values)
+    rank = max(1, math.ceil(pct / 100.0 * len(ordered)))
+    return ordered[rank - 1]
 
 
-def get_embedding(text: str, ollama_url: str = "http://127.0.0.1:11434", model: str = "nomic-embed-text") -> list[float]:
-    """Retrieves embedding vector from local Ollama with retry for cold start."""
-    for attempt in range(2):
-        try:
-            req = urllib.request.Request(
-                f"{ollama_url}/api/embeddings",
-                data=json.dumps({"model": model, "prompt": text}).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=15.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                return data["embedding"]
-        except Exception:
-            if attempt == 0:
-                time.sleep(1.0)
-                continue
-    # Deterministic pseudo-embedding for testing / offline stub mode
-    rng = random.Random(text.strip().lower())
-    vec = [rng.gauss(0, 1) for _ in range(768)]
-    norm = math.sqrt(sum(x * x for x in vec))
-    return [x / norm for x in vec]
-
-
-def run_module_level_tests(ollama_url: str = "http://127.0.0.1:11434") -> dict[str, Any]:
-    print("\n--- Running Level 1 (Module: Embedding Quality) ---")
-    
-    # 1. Paraphrase pairs vs Unrelated pairs
-    para_sims = []
-    for q1, q2 in PARAPHRASE_PAIRS:
-        v1 = get_embedding(q1, ollama_url)
-        v2 = get_embedding(q2, ollama_url)
-        para_sims.append(cosine_similarity(v1, v2))
-        
-    unrelated_sims = []
-    for q1, q2 in UNRELATED_PAIRS:
-        v1 = get_embedding(q1, ollama_url)
-        v2 = get_embedding(q2, ollama_url)
-        unrelated_sims.append(cosine_similarity(v1, v2))
-
-    mean_para = sum(para_sims) / len(para_sims)
-    mean_unrelated = sum(unrelated_sims) / len(unrelated_sims)
-    separation_gap = mean_para - mean_unrelated
-
-    # 2. Embedding latency per chunk
-    start = time.perf_counter()
-    sample_text = "The university shall place an undergraduate student on academic warning if their CGPA drops below 2.00 at the conclusion of any regular semester."
-    trials = 10
-    for _ in range(trials):
-        get_embedding(sample_text, ollama_url)
-    latency_ms = ((time.perf_counter() - start) / trials) * 1000.0
-
-    # 3. Determinism test
-    v_a = get_embedding(sample_text, ollama_url)
-    v_b = get_embedding(sample_text, ollama_url)
-    max_diff = max(abs(a - b) for a, b in zip(v_a, v_b))
-
-    print(f"Mean Paraphrase Cosine Similarity: {mean_para:.4f}")
-    print(f"Mean Unrelated Cosine Similarity:  {mean_unrelated:.4f}")
-    print(f"Embedding Separation Gap:          {separation_gap:.4f}")
-    print(f"Embedding Time per Chunk:          {latency_ms:.1f} ms")
-    print(f"Embedding Determinism (Max Diff):  {max_diff:.8f}")
-
-    return {
-        "mean_paraphrase_similarity": round(mean_para, 4),
-        "mean_unrelated_similarity": round(mean_unrelated, 4),
-        "separation_gap": round(separation_gap, 4),
-        "embedding_time_ms": round(latency_ms, 2),
-        "determinism_max_diff": max_diff,
-    }
-
-
-def add_noise_to_query(query: str) -> str:
-    """Injects realistic typographical errors into a query string."""
+def add_typos(query: str, rng: random.Random, n: int = 2) -> str:
+    """Swap two adjacent inner letters in `n` different words of length >= 4."""
     words = query.split()
-    if not words:
-        return query
-    idx = random.randint(0, len(words) - 1)
-    target = list(words[idx])
-    if len(target) > 3:
-        # Swap two adjacent letters
-        swap_pos = random.randint(1, len(target) - 2)
-        target[swap_pos], target[swap_pos + 1] = target[swap_pos + 1], target[swap_pos]
-        words[idx] = "".join(target)
+    candidates = [i for i, w in enumerate(words) if len(re.sub(r"\W", "", w)) >= 4]
+    for idx in rng.sample(candidates, min(n, len(candidates))):
+        w = list(words[idx])
+        pos = rng.randint(1, len(w) - 3)
+        w[pos], w[pos + 1] = w[pos + 1], w[pos]
+        words[idx] = "".join(w)
     return " ".join(words)
 
 
-def run_component_level_tests(golden_file: Path, api_url: str = "http://localhost:8080/api/ask") -> dict[str, Any]:
-    print("\n--- Running Level 2 (Component: Retrieval Quality) ---")
-    
-    with open(golden_file, encoding="utf-8") as f:
-        queries = [json.loads(line) for line in f if line.strip()]
+def norm_doc(name: str | None) -> str:
+    return str(name or "").strip().lower()
 
-    answerable = [q for q in queries if not q.get("must_abstain", False)]
-    
-    clean_hits_at_3 = 0
-    clean_hits_at_5 = 0
-    clean_reciprocal_ranks = []
-    clean_ndcg_5 = []
 
-    noisy_hits_at_5 = 0
+class Target:
+    """The API under test plus the Ollama endpoint used for embeddings and the judge."""
 
-    for item in answerable:
-        q_text = item["question"]
-        gt_doc = str(item.get("ground_truth_doc", "")).lower()
+    def __init__(self, api_url: str, ollama_url: str, embed_model: str, judge_model: str,
+                 timeout: float, seed: int) -> None:
+        self.api = api_url.rstrip("/")
+        self.ollama = ollama_url.rstrip("/")
+        self.embed_model = embed_model
+        self.judge_model = judge_model
+        self.seed = seed
+        self.http = httpx.Client(timeout=timeout)
+        self.headers = {"X-RAGOps-No-Cache": "1"}
+        # Trace ids of this suite run: eval-<label>-<time>-r<run>-<step>-<question id>,
+        # unique per run so a trace id in the report names exactly one trace.
+        self.run_id = "eval"
 
-        # Query live API to inspect retrieved chunks
-        retrieved_sources = []
+    def info(self) -> dict[str, Any]:
         try:
-            req = urllib.request.Request(
-                api_url,
-                data=json.dumps({"question": q_text}).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=10.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                retrieved_sources = [c["source"].lower() for c in data.get("retrieved", [])]
-        except Exception:
-            # Fallback mock for offline component evaluation
-            retrieved_sources = [gt_doc, "academic-rules-handbook-jun-2026.pdf", "grading-page.html"]
+            r = self.http.get(f"{self.api}/api/info")
+            r.raise_for_status()
+            return dict(r.json())
+        except Exception as exc:
+            raise SuiteError(f"API not reachable at {self.api}: {exc}") from exc
 
-        # 1. Recall@3 & Recall@5
-        found_at_3 = any(gt_doc in s for s in retrieved_sources[:3]) if gt_doc else False
-        found_at_5 = any(gt_doc in s for s in retrieved_sources[:5]) if gt_doc else False
-        if found_at_3:
-            clean_hits_at_3 += 1
-        if found_at_5:
-            clean_hits_at_5 += 1
-
-        # 2. MRR (Mean Reciprocal Rank)
-        rank = 0
-        for i, s in enumerate(retrieved_sources[:5]):
-            if gt_doc and gt_doc in s:
-                rank = i + 1
-                break
-        clean_reciprocal_ranks.append(1.0 / rank if rank > 0 else 0.0)
-
-        # 3. nDCG@5
-        dcg = 1.0 / math.log2(rank + 1) if rank > 0 else 0.0
-        idcg = 1.0 / math.log2(1 + 1)  # Ideal ranking at position 1
-        clean_ndcg_5.append(dcg / idcg)
-
-        # 4. Noise test on perturbed query
-        noisy_q = add_noise_to_query(q_text)
+    def embed(self, texts: list[str]) -> list[list[float]]:
         try:
-            req_noise = urllib.request.Request(
-                api_url,
-                data=json.dumps({"question": noisy_q}).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req_noise, timeout=10.0) as resp:
-                data_noise = json.loads(resp.read().decode("utf-8"))
-                noise_sources = [c["source"].lower() for c in data_noise.get("retrieved", [])]
-                if any(gt_doc in s for s in noise_sources[:5]):
-                    noisy_hits_at_5 += 1
-        except Exception:
-            if found_at_5 and random.random() > 0.15:
-                noisy_hits_at_5 += 1
+            r = self.http.post(f"{self.ollama}/api/embed", json={"model": self.embed_model, "input": texts})
+            r.raise_for_status()
+            vecs = r.json().get("embeddings") or []
+        except Exception as exc:
+            raise SuiteError(f"embedding call to {self.ollama} failed: {exc}") from exc
+        if len(vecs) != len(texts):
+            raise SuiteError(f"expected {len(texts)} embeddings, got {len(vecs)}")
+        return vecs
 
-    n_ans = len(answerable) or 1
-    recall_3 = clean_hits_at_3 / n_ans
-    recall_5 = clean_hits_at_5 / n_ans
-    mrr = sum(clean_reciprocal_ranks) / n_ans
-    ndcg_5 = sum(clean_ndcg_5) / n_ans
-    noise_recall_5 = noisy_hits_at_5 / n_ans
-    noise_drop_pct = ((recall_5 - noise_recall_5) / recall_5 * 100.0) if recall_5 > 0 else 0.0
+    def retrieve(self, question: str, rid: str) -> dict[str, Any]:
+        r = self.http.post(f"{self.api}/api/retrieve", json={"question": question},
+                           headers={**self.headers, "X-Request-ID": rid})
+        r.raise_for_status()
+        return dict(r.json())
 
-    print(f"Recall@3:              {recall_3:.4f}")
-    print(f"Recall@5:              {recall_5:.4f}")
-    print(f"MRR (Mean Recip Rank): {mrr:.4f}")
-    print(f"nDCG@5:                {ndcg_5:.4f}")
-    print(f"Noise Test Recall@5:   {noise_recall_5:.4f} (Degradation: {noise_drop_pct:.1f}%)")
-
-    return {
-        "recall_at_3": round(recall_3, 4),
-        "recall_at_5": round(recall_5, 4),
-        "mrr": round(mrr, 4),
-        "ndcg_at_5": round(ndcg_5, 4),
-        "noise_recall_at_5": round(noise_recall_5, 4),
-        "noise_degradation_pct": round(noise_drop_pct, 2),
-    }
-
-
-def run_e2e_level_tests(golden_file: Path, api_url: str = "http://localhost:8080/api/ask") -> dict[str, Any]:
-    print("\n--- Running Level 3 (End-to-End: Answers & Generation) ---")
-    
-    with open(golden_file, encoding="utf-8") as f:
-        queries = [json.loads(line) for line in f if line.strip()]
-
-    latencies = []
-    abstention_correct = 0
-    total_unanswerable = 0
-    valid_citations_count = 0
-    total_citations_count = 0
-    faithfulness_scores = []
-
-    # 8 hand-labeled ground-truth calibration set
-    # Maps question id to human label: True = fully grounded, False = unfaithful/hallucinated
-    human_calibration_labels = {
-        "g01": True, "g02": True, "g03": True, "g04": True,
-        "g05": True, "g06": True, "g18": True, "g22": True
-    }
-    judge_agreements = 0
-
-    for item in queries:
-        q_text = item["question"]
-        must_abstain = item.get("must_abstain", False)
-        
+    def ask(self, question: str, rid: str) -> tuple[dict[str, Any], float]:
         t0 = time.perf_counter()
-        resp_data = {}
-        try:
-            req = urllib.request.Request(
-                api_url,
-                data=json.dumps({"question": q_text}).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=20.0) as resp:
-                resp_data = json.loads(resp.read().decode("utf-8"))
-        except Exception:
-            # Fallback mock for testing
-            resp_data = {
-                "answer": item.get("expected_answer", ""),
-                "answered_from_context": not must_abstain,
-                "confidence": "low" if must_abstain else "high",
-                "citations": [{"source": item.get("ground_truth_doc", ""), "page": item.get("ground_truth_page", 1)}] if not must_abstain else [],
-                "retrieved": [{"source": item.get("ground_truth_doc", ""), "page": item.get("ground_truth_page", 1)}] if not must_abstain else []
-            }
-        
+        r = self.http.post(f"{self.api}/api/ask", json={"question": question},
+                           headers={**self.headers, "X-Request-ID": rid})
         elapsed = time.perf_counter() - t0
+        r.raise_for_status()
+        return dict(r.json()), elapsed
+
+    def judge(self, question: str, answer: str, passages: list[dict[str, Any]]) -> tuple[bool, str]:
+        if self.judge_model == "grounding":
+            return grounding_judge(question, answer, passages)
+        return self.judge_llm(question, answer, passages)
+
+    def judge_llm(self, question: str, answer: str, passages: list[dict[str, Any]]) -> tuple[bool, str]:
+        """Optional LLM judge. With llama3.2:3b its verdicts contradicted its own reasons on
+        our baseline (see the report), so the default judge is grounding_judge()."""
+        context = "\n\n".join(f"[{i}] ({p['source']} p.{p.get('page')}) {p['text']}" for i, p in enumerate(passages, 1))
+        payload = {
+            "model": self.judge_model,
+            "format": "json",
+            "stream": False,
+            "options": {"temperature": 0.0, "seed": self.seed},
+            "messages": [
+                {"role": "system", "content": JUDGE_SYSTEM},
+                {"role": "user", "content": f"QUESTION: {question}\n\nCONTEXT:\n{context}\n\nANSWER: {answer}"},
+            ],
+        }
+        try:
+            r = self.http.post(f"{self.ollama}/api/chat", json=payload)
+            r.raise_for_status()
+            out = json.loads(r.json()["message"]["content"])
+        except Exception as exc:
+            raise SuiteError(f"faithfulness judge ({self.judge_model}) failed: {exc}") from exc
+        # The verdict is derived from the listed facts, not asked for separately: a
+        # 3B judge asked for both often contradicted its own reason.
+        facts = out.get("unsupported_facts")
+        if not isinstance(facts, list):
+            raise SuiteError(f"judge returned no unsupported_facts list: {str(out)[:200]}")
+        facts = [str(f).strip() for f in facts if str(f).strip()]
+        reason = str(out.get("reason", ""))
+        return not facts, ((f"unsupported: {'; '.join(facts)} | " if facts else "") + reason)[:300]
+
+
+_STOP = set("""a about above after again against all also among and any are because been before being
+below between both but by can could does doing down during each from further have having here into its
+just more most must only other over same should some such than that their them then there these they
+this those through under until upon very what when where which while will with within without would your
+student students university shall which""".split())
+_NUM = re.compile(r"\d+(?:[.,:]\d+)*")
+
+
+def _nums(text: str) -> set[str]:
+    out = set()
+    for m in _NUM.findall(text):
+        v = m.replace(",", "")
+        if ":" in v:
+            out.add(v)
+            continue
+        try:
+            out.add(f"{float(v):g}")
+        except ValueError:
+            out.add(v)
+    return out
+
+
+def _words(text: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z]+", text.lower()) if len(w) > 3 and w not in _STOP]
+
+
+def grounding_judge(question: str, answer: str, passages: list[dict[str, Any]],
+                    min_word_share: float = 0.6) -> tuple[bool, str]:
+    """Deterministic faithfulness check against the retrieved context.
+
+    Grounded when (1) every number in the answer (CGPA, %, years, times, fees) that is
+    not just echoed from the question appears in the context, and (2) at least 60% of
+    the answer's content words appear in the context (5-letter prefix match, so
+    plural and tense variants count). Reproducible and explainable; its agreement with
+    hand labels is reported like an LLM judge's would be.
+    """
+    context = " ".join(p.get("text", "") for p in passages)
+    ctx_nums, q_nums = _nums(context), _nums(question)
+    missing = sorted(n for n in _nums(answer) - q_nums if n not in ctx_nums)
+    words = _words(answer)
+    prefixes = {w[:5] for w in _words(context)}
+    share = (sum(w[:5] in prefixes for w in words) / len(words)) if words else 1.0
+    ok = not missing and share >= min_word_share
+    reason = (f"numbers not in context: {', '.join(missing)}; " if missing else "all numbers in context; ") + \
+             f"content-word overlap {share:.2f} (need {min_word_share:.2f})"
+    return ok, reason
+
+
+def load_golden(path: Path) -> list[dict[str, Any]]:
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not rows:
+        raise SuiteError(f"no questions in {path}")
+    return rows
+
+
+def answer_sha(text: str) -> str:
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()[:16]
+
+
+def load_human_labels(path: Path) -> dict[tuple[str, str], dict[str, Any]]:
+    """Hand labels from eval/label_answers.py, keyed by (question id, answer hash) so a
+    label is only compared with the exact answer the human read."""
+    if not path.exists():
+        return {}
+    labels = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            row = json.loads(line)
+            labels[(row["id"], row["answer_sha"])] = row
+    return labels
+
+
+# ----------------------------------------------------------------------- level 1
+def module_level(t: Target, chunk_texts: list[str]) -> dict[str, Any]:
+    para = [cosine(a, b) for a, b in zip(*[iter(t.embed([x for pair in PARAPHRASE_PAIRS for x in pair]))] * 2)]
+    unrel = [cosine(a, b) for a, b in zip(*[iter(t.embed([x for pair in UNRELATED_PAIRS for x in pair]))] * 2)]
+
+    timings = []
+    for text in chunk_texts:
+        t0 = time.perf_counter()
+        t.embed([text])
+        timings.append((time.perf_counter() - t0) * 1000.0)
+
+    probe = chunk_texts[0] if chunk_texts else PARAPHRASE_PAIRS[0][0]
+    v1, v2 = t.embed([probe])[0], t.embed([probe])[0]
+    max_diff = max(abs(a - b) for a, b in zip(v1, v2))
+
+    mean_p, mean_u = statistics.mean(para), statistics.mean(unrel)
+    return {
+        "paraphrase_pairs": len(para),
+        "unrelated_pairs": len(unrel),
+        "mean_paraphrase_similarity": round(mean_p, 4),
+        "mean_unrelated_similarity": round(mean_u, 4),
+        "separation_gap": round(mean_p - mean_u, 4),
+        "min_paraphrase_similarity": round(min(para), 4),
+        "max_unrelated_similarity": round(max(unrel), 4),
+        "embedding_time_ms_per_chunk": round(statistics.mean(timings), 2) if timings else None,
+        "embedding_time_chunks_measured": len(timings),
+        "determinism_max_abs_diff": max_diff,
+    }
+
+
+# ----------------------------------------------------------------------- level 2
+def _rank_metrics(sources: list[str], gt: str) -> dict[str, float]:
+    rel = [1 if norm_doc(s) == gt else 0 for s in sources]
+    first = next((i + 1 for i, r in enumerate(rel) if r), 0)
+    dcg = sum(r / math.log2(i + 2) for i, r in enumerate(rel[:5]))
+    ideal = sorted(rel[:5], reverse=True)
+    idcg = sum(r / math.log2(i + 2) for i, r in enumerate(ideal))
+    return {
+        "hit3": float(any(rel[:3])),
+        "hit5": float(any(rel[:5])),
+        "rr": 1.0 / first if first else 0.0,
+        "ndcg5": dcg / idcg if idcg else 0.0,
+    }
+
+
+def _aggregate(rows: list[dict[str, float]]) -> dict[str, float]:
+    n = len(rows) or 1
+    return {
+        "recall_at_3": round(sum(r["hit3"] for r in rows) / n, 4),
+        "recall_at_5": round(sum(r["hit5"] for r in rows) / n, 4),
+        "mrr": round(sum(r["rr"] for r in rows) / n, 4),
+        "ndcg_at_5": round(sum(r["ndcg5"] for r in rows) / n, 4),
+    }
+
+
+def component_level(t: Target, golden: list[dict[str, Any]], rng: random.Random, run: int,
+                    per_q: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
+    answerable = [g for g in golden if not g.get("must_abstain") and g.get("ground_truth_doc")]
+    clean_rows, noisy_rows = [], []
+    contexts: dict[str, list[dict[str, Any]]] = {}
+    for g in answerable:
+        gt = norm_doc(g["ground_truth_doc"])
+        res = t.retrieve(g["question"], f"{t.run_id}-r{run}-ret-{g['id']}")
+        passages = res.get("passages", [])
+        contexts[g["id"]] = passages
+        m = _rank_metrics([p["source"] for p in passages], gt)
+        clean_rows.append(m)
+
+        noisy_q = add_typos(g["question"], rng)
+        noisy = t.retrieve(noisy_q, f"{t.run_id}-r{run}-noise-{g['id']}")
+        nm = _rank_metrics([p["source"] for p in noisy.get("passages", [])], gt)
+        noisy_rows.append(nm)
+        per_q.setdefault(g["id"], {}).update({
+            "retrieved_top5": [f"{p['source']}#p{p.get('page')}@{p['score']}" for p in passages[:5]],
+            "hit_at_5": bool(m["hit5"]),
+            "noisy_query": noisy_q,
+            "noisy_hit_at_5": bool(nm["hit5"]),
+        })
+
+    clean, noisy = _aggregate(clean_rows), _aggregate(noisy_rows)
+    return {
+        "questions": len(answerable),
+        "relevance": "a retrieved chunk is relevant when its document equals the golden ground_truth_doc",
+        **clean,
+        "noise_test": {
+            "method": "2 seeded adjacent-letter swaps per query",
+            **{f"noisy_{k}": v for k, v in noisy.items()},
+            **{f"delta_{k}": round(noisy[k] - clean[k], 4) for k in clean},
+        },
+    }, contexts
+
+
+# ----------------------------------------------------------------------- level 3
+def end_to_end_level(t: Target, golden: list[dict[str, Any]], contexts: dict[str, list[dict[str, Any]]],
+                     labels: dict[tuple[str, str], dict[str, Any]], run: int,
+                     per_q: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    latencies: list[float] = []
+    abst_total = abst_ok = false_abst = answerable_n = 0
+    cit_total = cit_valid = 0
+    gt_cited = answered_answerable = 0
+    judged = supported = 0
+    agree = compared = 0
+    disagreements: list[str] = []
+
+    for g in golden:
+        resp, elapsed = t.ask(g["question"], f"{t.run_id}-r{run}-ask-{g['id']}")
         latencies.append(elapsed)
+        answered = bool(resp.get("answered_from_context"))
+        retrieved = {(norm_doc(r["source"]), r.get("page")) for r in resp.get("retrieved", [])}
+        cites = resp.get("citations", [])
+        valid = [c for c in cites if (norm_doc(c["source"]), c.get("page")) in retrieved]
+        cit_total += len(cites)
+        cit_valid += len(valid)
 
-        # 1. Abstention correctness
-        if must_abstain:
-            total_unanswerable += 1
-            if resp_data.get("answered_from_context") is False:
-                abstention_correct += 1
+        row = per_q.setdefault(g["id"], {})
+        row.update({"question": g["question"], "type": g.get("type"), "must_abstain": bool(g.get("must_abstain")),
+                    "answered": answered, "answer": resp.get("answer", ""), "latency_s": round(elapsed, 3),
+                    "citations": [f"{c['source']}#p{c.get('page')}" for c in cites],
+                    "citations_valid": len(valid) == len(cites)})
 
-        # 2. Citation validity check
-        retrieved_set = {f"{c.get('source')}:{c.get('page')}" for c in resp_data.get("retrieved", [])}
-        for cit in resp_data.get("citations", []):
-            total_citations_count += 1
-            cit_key = f"{cit.get('source')}:{cit.get('page')}"
-            if cit_key in retrieved_set or cit.get("source") in [c.get("source") for c in resp_data.get("retrieved", [])]:
-                valid_citations_count += 1
+        if g.get("must_abstain"):
+            abst_total += 1
+            abst_ok += not answered
+            row["abstention_correct"] = not answered
+            continue
+        answerable_n += 1
+        false_abst += not answered
+        if not answered:
+            continue
+        answered_answerable += 1
+        gt_cited += any(norm_doc(c["source"]) == norm_doc(g.get("ground_truth_doc")) for c in cites)
 
-        # 3. Faithfulness check (is answer supported by retrieved context)
-        # Using lexical token overlap as automated judge
-        answer = resp_data.get("answer", "").lower()
-        context_words = set(re.findall(r"\w+", " ".join(c.get("source", "") for c in resp_data.get("retrieved", [])).lower()))
-        ans_words = [w for w in re.findall(r"\w+", answer) if len(w) > 3]
-        if ans_words:
-            faithful_judge = len(set(ans_words).intersection(context_words)) > 0 or not resp_data.get("answered_from_context")
-        else:
-            faithful_judge = True
-        faithfulness_scores.append(1.0 if faithful_judge else 0.0)
-
-        # Calibration agreement check on 8 hand-labeled questions
-        q_id = item.get("id")
-        if q_id in human_calibration_labels:
-            if faithful_judge == human_calibration_labels[q_id]:
-                judge_agreements += 1
-
-    # Compute statistics
-    latencies.sort()
-    p50 = latencies[len(latencies) // 2] if latencies else 0.0
-    p95 = latencies[int(len(latencies) * 0.95)] if latencies else 0.0
-    abstention_rate = (abstention_correct / total_unanswerable) * 100.0 if total_unanswerable > 0 else 100.0
-    citation_validity = (valid_citations_count / total_citations_count) * 100.0 if total_citations_count > 0 else 100.0
-    mean_faithfulness = sum(faithfulness_scores) / len(faithfulness_scores) if faithfulness_scores else 1.0
-    judge_agreement_pct = (judge_agreements / len(human_calibration_labels)) * 100.0
-
-    print(f"Faithfulness Score:       {mean_faithfulness:.4f}")
-    print(f"Judge-Human Agreement:    {judge_agreement_pct:.1f}% (across 8 hand-labeled answers)")
-    print(f"Abstention Correctness:   {abstention_rate:.1f}% ({abstention_correct}/{total_unanswerable})")
-    print(f"Citation Validity:        {citation_validity:.1f}%")
-    print(f"Latency P50:              {p50:.3f} s")
-    print(f"Latency P95:              {p95:.3f} s")
+        passages = contexts.get(g["id"]) or t.retrieve(g["question"], f"{t.run_id}-r{run}-ctx-{g['id']}").get("passages", [])
+        ok, reason = t.judge(g["question"], resp.get("answer", ""), passages)
+        judged += 1
+        supported += ok
+        row.update({"judge_supported": ok, "judge_reason": reason})
+        lab = labels.get((g["id"], answer_sha(resp.get("answer", ""))))
+        if lab is not None:
+            compared += 1
+            human = bool(lab["faithful"])
+            agree += human == ok
+            row["human_faithful"] = human
+            if human != ok:
+                disagreements.append(g["id"])
 
     return {
-        "faithfulness": round(mean_faithfulness, 4),
-        "judge_human_agreement_pct": round(judge_agreement_pct, 1),
-        "abstention_correctness_pct": round(abstention_rate, 1),
-        "citation_validity_pct": round(citation_validity, 1),
-        "latency_p50_s": round(p50, 3),
-        "latency_p95_s": round(p95, 3),
+        "questions": len(golden),
+        "faithfulness": round(supported / judged, 4) if judged else None,
+        "faithfulness_judged_answers": judged,
+        "judge_model": t.judge_model,
+        "judge_human_agreement": round(agree / compared, 4) if compared else None,
+        "judge_human_compared": compared,
+        "judge_human_disagreements": disagreements,
+        "abstention_correctness": round(abst_ok / abst_total, 4) if abst_total else None,
+        "abstention_questions": abst_total,
+        "false_abstention_rate": round(false_abst / answerable_n, 4) if answerable_n else None,
+        "citation_validity": round(cit_valid / cit_total, 4) if cit_total else 1.0,
+        "citations_total": cit_total,
+        "ground_truth_cited_rate": round(gt_cited / answered_answerable, 4) if answered_answerable else None,
+        "latency_p50_s": round(percentile(latencies, 50), 3),
+        "latency_p95_s": round(percentile(latencies, 95), 3),
+        "latency_mean_s": round(statistics.mean(latencies), 3),
     }
 
 
-def run_stochasticity_analysis(golden_file: Path) -> dict[str, Any]:
-    print("\n--- Running Stochasticity Analysis (Seed 42 vs Seed 43) ---")
-    random.seed(42)
-    res_run1 = run_module_level_tests()
-    
-    random.seed(43)
-    res_run2 = run_module_level_tests()
+# ----------------------------------------------------------------------- driver
+def run_once(t: Target, golden: list[dict[str, Any]], labels: dict[tuple[str, str], dict[str, Any]],
+             seed: int, run: int) -> dict[str, Any]:
+    random.seed(seed)
+    rng = random.Random(seed)
+    per_q: dict[str, dict[str, Any]] = {}
 
-    max_delta = max(abs(res_run1[k] - res_run2[k]) for k in res_run1 if isinstance(res_run1[k], (int, float)))
-    print(f"Maximum Stochasticity Metric Delta across runs: {max_delta:.6f}")
-    return {
-        "run1_gap": res_run1["separation_gap"],
-        "run2_gap": res_run2["separation_gap"],
-        "max_metric_delta": round(max_delta, 6)
-    }
+    print(f"\n=== run {run}: level 2 (component: retrieval) ===", flush=True)
+    comp, contexts = component_level(t, golden, rng, run, per_q)
+    chunk_texts = [p["text"] for ps in list(contexts.values())[:4] for p in ps][:20]
+
+    print(f"=== run {run}: level 1 (module: embedding) ===", flush=True)
+    mod = module_level(t, chunk_texts)
+
+    print(f"=== run {run}: level 3 (end-to-end: answers) ===", flush=True)
+    e2e = end_to_end_level(t, golden, contexts, labels, run, per_q)
+    return {"module_level": mod, "component_level": comp, "end_to_end_level": e2e, "per_question": per_q}
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run 3-Level Offline RAGOps Evaluation Suite")
-    parser.add_argument("--golden", default="eval/golden.jsonl", help="Path to golden set JSONL")
-    parser.add_argument("--api-url", default="http://localhost:8080/api/ask", help="RAHBAR API endpoint")
-    parser.add_argument("--output", default="eval/results/three_level_eval.json", help="Output results file")
-    args = parser.parse_args()
+def flat_metrics(r: dict[str, Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for level in ("module_level", "component_level", "end_to_end_level"):
+        for k, v in r[level].items():
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                if k == "noise_test":
+                    for nk, nv in v.items():
+                        if isinstance(nv, (int, float)):
+                            out[f"{level}.noise.{nk}"] = nv
+                continue
+            out[f"{level}.{k}"] = v
+    return out
 
-    golden_path = Path(args.golden)
-    if not golden_path.exists():
-        print(f"Error: Golden file not found at {golden_path}")
-        sys.exit(1)
 
-    print("=================================================================")
-    print("RAHBAR RAGOps: Three-Level Offline Evaluation Suite (Part B)")
-    print(f"Golden Set:  {args.golden}")
-    print(f"API Target:  {args.api_url}")
-    print(f"Output File: {args.output}")
-    print("=================================================================")
+SUMMARY_ROWS = [
+    ("Module", "module_level.mean_paraphrase_similarity", "Mean cosine, paraphrase pairs", "{:.4f}"),
+    ("Module", "module_level.mean_unrelated_similarity", "Mean cosine, unrelated pairs", "{:.4f}"),
+    ("Module", "module_level.separation_gap", "Gap (paraphrase - unrelated)", "{:.4f}"),
+    ("Module", "module_level.embedding_time_ms_per_chunk", "Embedding time per chunk (ms)", "{:.1f}"),
+    ("Module", "module_level.determinism_max_abs_diff", "Determinism: max |diff|", "{:.2e}"),
+    ("Component", "component_level.recall_at_3", "Recall@3", "{:.4f}"),
+    ("Component", "component_level.recall_at_5", "Recall@5", "{:.4f}"),
+    ("Component", "component_level.mrr", "MRR", "{:.4f}"),
+    ("Component", "component_level.ndcg_at_5", "nDCG@5", "{:.4f}"),
+    ("Component", "component_level.noise.noisy_recall_at_5", "Recall@5 with typos", "{:.4f}"),
+    ("Component", "component_level.noise.delta_recall_at_5", "  change", "{:+.4f}"),
+    ("Component", "component_level.noise.delta_mrr", "  MRR change with typos", "{:+.4f}"),
+    ("End-to-end", "end_to_end_level.faithfulness", "Faithfulness (grounding judge)", "{:.4f}"),
+    ("End-to-end", "end_to_end_level.judge_human_agreement", "Judge/human agreement", "{:.4f}"),
+    ("End-to-end", "end_to_end_level.abstention_correctness", "Abstention correctness", "{:.4f}"),
+    ("End-to-end", "end_to_end_level.false_abstention_rate", "False abstention (answerable)", "{:.4f}"),
+    ("End-to-end", "end_to_end_level.citation_validity", "Citation validity", "{:.4f}"),
+    ("End-to-end", "end_to_end_level.latency_p50_s", "Latency p50 (s)", "{:.2f}"),
+    ("End-to-end", "end_to_end_level.latency_p95_s", "Latency p95 (s)", "{:.2f}"),
+]
 
-    start_all = time.perf_counter()
-    mod_results = run_module_level_tests()
-    comp_results = run_component_level_tests(golden_path, args.api_url)
-    e2e_results = run_e2e_level_tests(golden_path, args.api_url)
-    stoch_results = run_stochasticity_analysis(golden_path)
 
-    full_results = {
+def _fmt(fmt: str, v: Any) -> str:
+    return "n/a" if v is None else fmt.format(v)
+
+
+def summary_table(result: dict[str, Any]) -> str:
+    runs = result["runs"]
+    f1 = flat_metrics(runs[0])
+    f2 = flat_metrics(runs[1]) if len(runs) > 1 else {}
+    head = "| Level | Metric | Run 1 | Run 2 | Delta |\n|---|---|---|---|---|"
+    lines = [head]
+    for level, key, label, fmt in SUMMARY_ROWS:
+        a, b = f1.get(key), f2.get(key)
+        delta = (b - a) if (a is not None and b is not None) else None
+        lines.append(f"| {level} | {label} | {_fmt(fmt, a)} | {_fmt(fmt, b) if f2 else '-'} | "
+                     f"{_fmt('{:+.4f}', delta) if f2 else '-'} |")
+    return "\n".join(lines)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="RAHBAR three-level offline evaluation suite (Part B)")
+    ap.add_argument("--api-url", default=os.environ.get("EVAL_TARGET_URL", "http://localhost:8000"))
+    ap.add_argument("--ollama-url", default=os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"))
+    ap.add_argument("--embed-model", default=os.environ.get("EMBED_MODEL", "nomic-embed-text"))
+    ap.add_argument("--judge-model", default=os.environ.get("JUDGE_MODEL", "grounding"),
+                    help="grounding (deterministic, default) or an Ollama model name for an LLM judge")
+    ap.add_argument("--golden", default=os.environ.get("EVAL_GOLDEN", str(HERE / "golden.jsonl")))
+    ap.add_argument("--labels", default=os.environ.get("EVAL_HUMAN_LABELS", str(HERE / "human_labels.jsonl")))
+    ap.add_argument("--results-dir", default=os.environ.get("RESULTS_DIR", str(HERE / "results")))
+    ap.add_argument("--label", default=os.environ.get("EVAL_LABEL", "baseline"),
+                    help="baseline | candidate | any name; used in the result file name")
+    ap.add_argument("--seed", type=int, default=int(os.environ.get("EVAL_SEED", 42)))
+    ap.add_argument("--repeat", type=int, default=int(os.environ.get("EVAL_REPEAT", 2)))
+    ap.add_argument("--timeout", type=float, default=float(os.environ.get("EVAL_TIMEOUT", 120)))
+    args = ap.parse_args()
+
+    t = Target(args.api_url, args.ollama_url, args.embed_model, args.judge_model, args.timeout, args.seed)
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    t.run_id = f"eval-{args.label}-{stamp[4:13]}"
+    started = time.perf_counter()
+    try:
+        info = t.info()
+        golden = load_golden(Path(args.golden))
+        labels = load_human_labels(Path(args.labels))
+        print(f"RAHBAR three-level suite | label={args.label} | target={args.api_url} | "
+              f"collection={info.get('collection')} | golden={len(golden)} | seed={args.seed} | repeat={args.repeat}",
+              flush=True)
+        runs = [run_once(t, golden, labels, args.seed, i + 1) for i in range(max(1, args.repeat))]
+    except (SuiteError, httpx.HTTPError) as exc:
+        print(f"\nSUITE ERROR: {exc}\nNo result file written: the suite never reports numbers it did not measure.",
+              file=sys.stderr, flush=True)
+        return 2
+
+    f1 = flat_metrics(runs[0])
+    stoch = {}
+    if len(runs) > 1:
+        f2 = flat_metrics(runs[1])
+        stoch = {k: {"run1": f1[k], "run2": f2.get(k), "delta": round(f2.get(k, 0) - f1[k], 6)}
+                 for k in f1 if k in f2}
+    golden_sha = hashlib.sha256(Path(args.golden).read_bytes()).hexdigest()[:12]
+    result = {
+        "label": args.label,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "module_level": mod_results,
-        "component_level": comp_results,
-        "end_to_end_level": e2e_results,
-        "stochasticity": stoch_results,
-        "total_runtime_seconds": round(time.perf_counter() - start_all, 2)
+        "target": {"api_url": args.api_url, **info},
+        "config": {"seed": args.seed, "repeat": len(runs), "golden": args.golden, "golden_sha256": golden_sha,
+                   "golden_questions": len(golden), "human_labels": len(labels),
+                   "embed_model": args.embed_model, "judge_model": args.judge_model, "cache": "bypassed"},
+        # Reported metrics are run 1; run 2 exists to measure stochasticity.
+        "module_level": runs[0]["module_level"],
+        "component_level": runs[0]["component_level"],
+        "end_to_end_level": runs[0]["end_to_end_level"],
+        "stochasticity": {
+            # rates and scores only: latency depends on machine load, and counts
+            # (citations_total, questions, ...) are not quality metrics
+            "max_abs_delta": max((abs(v["delta"]) for k, v in stoch.items()
+                                  if not any(x in k for x in ("latency", "time_ms", "total", "questions",
+                                                               "judged", "compared", "pairs", "measured"))),
+                                 default=0.0),
+            "metrics": stoch,
+        },
+        "runs": runs,
+        "total_runtime_seconds": round(time.perf_counter() - started, 1),
     }
 
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(full_results, f, indent=2)
+    out_dir = Path(args.results_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_json = out_dir / f"eval_{args.label}_{stamp}.json"
+    out_json.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    shutil.copy2(out_json, out_dir / f"latest_{args.label}.json")
+    table = summary_table(result)
+    md = (f"# RAHBAR evaluation: {args.label} ({result['timestamp']})\n\n"
+          f"Target: `{args.api_url}`, collection `{info.get('collection')}` "
+          f"({info.get('collection_version')}), embed `{info.get('embed_model')}` {info.get('embed_version')}, "
+          f"top_k {info.get('top_k')}, seed {args.seed}, golden {len(golden)} questions.\n\n{table}\n")
+    (out_dir / f"eval_{args.label}_{stamp}.md").write_text(md, encoding="utf-8")
 
-    print(f"\nSaved complete 3-Level Evaluation results to: {output_path}")
+    print("\n" + table)
+    print(f"\nStochasticity: max |run2 - run1| over quality metrics = {result['stochasticity']['max_abs_delta']}")
+    print(f"Result file:   {out_json}\nSummary table: {out_json.with_suffix('.md')}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

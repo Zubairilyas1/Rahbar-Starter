@@ -16,6 +16,15 @@ from ..schemas import Passage
 
 log = logging.getLogger("rahbar.retrieval.chroma")
 
+_HISTORICAL = re.compile(r"\b(2023|old|previous|superseded|earlier|past|history)\b", re.I)
+
+
+def where_filter_for(question: str) -> dict[str, Any] | None:
+    """The metadata filter applied for this question. Superseded (archived) chunks are
+    excluded unless the question explicitly asks about an older version. Exposed so
+    the trace records exactly the filter the query used (Assignment 03 D1)."""
+    return None if _HISTORICAL.search(question) else {"superseded": False}
+
 
 class ChromaRetriever:
     name = "chroma"
@@ -56,11 +65,8 @@ class ChromaRetriever:
 
         collection = self.client.get_collection(name=self.settings.collection)
 
-        # Detect historical question intent to allow superseded clauses if explicitly requested
-        is_historical = bool(re.search(r"\b(2023|old|previous|superseded|earlier|past|history)\b", question, re.I))
-
-        # Build where filter: filter out superseded documents unless historical question
-        where_filter = None if is_historical else {"superseded": False}
+        where_filter = where_filter_for(question)
+        is_historical = where_filter is None
 
         # Query ChromaDB: request extra candidates to filter safely if needed.
         # chromadb-client's generated stubs are stricter than the plain
@@ -102,6 +108,7 @@ class ChromaRetriever:
                     section=str(meta.get("section", "General")),
                     page=int(meta["page"]) if meta.get("page") is not None else None,  # type: ignore[arg-type]
                     score=score,
+                    doc_version=str(meta.get("doc_version", "unknown")),
                 )
             )
             if len(passages) >= limit:

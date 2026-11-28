@@ -1,0 +1,97 @@
+# Candidate API (Part C / F3): a SECOND Deployment with its own Service and its own
+# collection. Never receives user traffic; the eval Job (k8s/eval-job.yaml) tests it.
+# This file deploys the deliberately BAD (rahbar_c120, chunk 120 / overlap 0) candidate.
+#   kubectl apply -f k8s/release/<this file>
+#   kubectl rollout status deployment/api-candidate -n rahbar
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-candidate
+  namespace: rahbar
+  annotations:
+    kubernetes.io/change-cause: "candidate: rahbar_c120 (chunk 120 / overlap 0)"
+spec:
+  revisionHistoryLimit: 10
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector:
+    matchLabels: {app: api-candidate}
+  template:
+    metadata:
+      labels: {app: api-candidate}
+    spec:
+      serviceAccountName: rahbar-api
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: rahbar-api:dev   # overlays pin this to a real tag/SHA
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8000}]
+          envFrom: [{configMapRef: {name: rahbar-config}}]
+          env:
+            - name: LLM_API_KEY
+              valueFrom: {secretKeyRef: {name: rahbar-secret, key: LLM_API_KEY}}
+            # --- release provenance (changed by a release, reversed by rollout undo) ---
+            - {name: PIPELINE_VERSION, value: "candidate-c120"}
+            - {name: CHROMA_COLLECTION, value: "rahbar_c120"}
+            - {name: COLLECTION_VERSION, value: "c120-o0"}
+            - {name: EMBED_MODEL, value: "nomic-embed-text"}
+            - {name: EMBED_VERSION, value: "v1.5"}
+            # --- traces: stdout (kubectl logs) AND one file per pod on the traces PVC ---
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - {name: TRACE_LOG_PATH, value: "/traces/$(POD_NAME).jsonl"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: traces, mountPath: /traces}
+          lifecycle:
+            preStop: {exec: {command: ["sh", "-c", "sleep 5"]}}
+          # F5: measured with `kubectl top pods --containers` (idle ~13m CPU / ~69Mi;
+          # under the eval Job see docs/evidence/a3/kubectl-top-under-eval.txt).
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # section 4.3: exact probe timings from the handout.
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            failureThreshold: 30
+            periodSeconds: 2
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /readyz, port: 8000}
+            periodSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - name: traces
+          persistentVolumeClaim: {claimName: rahbar-traces}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-candidate
+  namespace: rahbar
+spec:
+  selector: {app: api-candidate}
+  ports: [{port: 8000, targetPort: 8000}]

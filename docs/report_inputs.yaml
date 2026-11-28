@@ -1,0 +1,21 @@
+# Which result file feeds each report table (scripts/build_report.py). Paths are
+# relative to the repository root; everything else is picked automatically.
+part_b: eval/results/cluster/eval_baseline_20261127T165203Z.json        # Part B, before Batch B, 2 runs
+after_batch_b: eval/results/cluster/eval_baseline_20261127T172053Z.json # E3 and the gate's baseline, 1 run
+cand_bad: eval/results/cluster/eval_candidate_20261127T174705Z.json     # rahbar_c120 (chunk 120 / overlap 0)
+gate_fail: eval/results/cluster/gate_candidate_20261127T180019Z.json
+cand_good: eval/results/cluster/eval_candidate_20261127T180210Z.json    # rahbar_c600 (chunk 600 / overlap 100)
+gate_pass: eval/results/cluster/gate_candidate_20261127T181713Z.json
+verif_b: eval/results/cluster/verification_report_20261127T171516Z.json
+cov_before: eval/results/coverage_golden_baseline_20261127T150333Z.json
+cov_after: eval/results/coverage_golden_20261127T150348Z.json
+
+# D5: root cause of a wrong Part B answer, from its trace only
+# (python traces/diagnose.py eval-r1-ask-g31 --path traces/cluster --since 2026-11-27T16:52:00Z --until 2026-11-27T17:14:00Z)
+d5_trace_id: "eval-r1-ask-g31 (2026-11-27T17:06:37Z, collection rahbar c400-o50, nomic-embed-text v1.5, filter superseded=False)"
+d5_lines:
+  - "1. The answer says the sports complex and gym are open 8:00 AM to 4:00 PM, with answered_from_context=true and a citation."
+  - "2. None of the five retrieved chunks comes from a sports document. The top two are annual reports (p.6, 0.680), then annual-report-2023-24 p.85 (0.644) and the student handbook (0.630)."
+  - "3. The only '8:00 AM to 4:00 PM' in the exact prompt (hash verified) is chunk 0baaba0f98948a4b, p.85, section 'In-house Medical Center': the clinic's hours, not the gym's."
+  - "4. Top-1 similarity 0.680 cleared the 0.50 relevance floor, so the generator ran and borrowed the nearest 'operating hours'. Cause: a corpus gap (no sports document indexed yet) plus a floor too low to force abstention."
+  - "5. Batch B's doc03 closes the gap: after ingestion g31 retrieves it at 0.872 and answers '07:00 to 21:00'. A reranker or a higher floor would have abstained."

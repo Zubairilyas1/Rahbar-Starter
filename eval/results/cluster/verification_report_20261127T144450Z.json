@@ -1,0 +1,287 @@
+{
+  "timestamp": "2026-11-27T14:47:48Z",
+  "total_documents": 9,
+  "passed_documents": 9,
+  "quarantined_documents": 0,
+  "results": [
+    {
+      "source": "undergraduate-academic-rules-aug-2023.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: metadata present, all 26 pages extracted"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency: explicitly marked superseded; indexed as an archived version"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "b152502509affbf82c2387d5250ca1852018d1e17489349e7bb5e4bae1ba53db",
+      "doc_version": "2023-08",
+      "supersedes": []
+    },
+    {
+      "source": "academic-rules-handbook-jun-2026.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: metadata present, all 58 pages extracted"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "baa23c54f51ceccc9bd10dfda4c5c0756057d97b41c1dbda260c2d40091d8fa7",
+      "doc_version": "2026-06",
+      "supersedes": []
+    },
+    {
+      "source": "prospectus-2026-academic-rules-and-regulations.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: metadata present, all 5 pages extracted"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "1e499fe1361fe2e4994544c2d4478c12763951ffc0ffd3a4f8b827d993ebf647",
+      "doc_version": "2026",
+      "supersedes": []
+    },
+    {
+      "source": "student-handbook-jun-2026.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: metadata present, all 64 pages extracted"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "db25316383238ce82362262ded69d45522bb56228af889f3bcf3082c49bd3b4f",
+      "doc_version": "2026-06",
+      "supersedes": []
+    },
+    {
+      "source": "annual-report-2019-20.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: metadata present, all 33 pages extracted"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "8a7679414a02550ea3d6c0fb368b26fa2b073d8aaed40be39db6dcde456fd25f",
+      "doc_version": "2019-20",
+      "supersedes": []
+    },
+    {
+      "source": "annual-report-2023-24.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: metadata present, all 85 pages extracted"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "57c486be6dd416286a0a1e0956bea39e27b12617f5ae4934c3c05f81534fded4",
+      "doc_version": "2023-24",
+      "supersedes": []
+    },
+    {
+      "source": "fee-structure-page.html",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "23596a2b9af4a6ae8ea9f8f594eb3692560cf0eb7dcff098308b8e88e9d49311",
+      "doc_version": "2026-27",
+      "supersedes": []
+    },
+    {
+      "source": "grading-page.html",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "6de3bb2bbdf4fa65d5046780dfd362487ff4f4d60eb2e07835dd3939c9601817",
+      "doc_version": "2026",
+      "supersedes": []
+    },
+    {
+      "source": "faculty-entrepreneurship-and-technical-start-ups-policy.pdf",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: metadata present, all 8 pages extracted"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "2b92b0370e4b15cd6acf9f9edc6383d4b1fbc2f84e962b3b8e47fdece390d004",
+      "doc_version": "2022-05",
+      "supersedes": []
+    }
+  ]
+}

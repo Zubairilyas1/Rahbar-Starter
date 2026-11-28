@@ -1,0 +1,57 @@
+# Re-applies the release gate to the latest candidate result already on the
+# results volume -- no suite re-run, no image rebuild. Used to show that editing a
+# threshold in the rahbar-gate ConfigMap changes the outcome (F2):
+#   kubectl apply -f k8s/jobs/eval-gate-only-job.yaml && kubectl logs -f job/rahbar-eval-gate -n rahbar
+#   kubectl patch configmap rahbar-gate -n rahbar --patch-file k8s/jobs/gate-strict-patch.yaml
+#   kubectl delete job rahbar-eval-gate -n rahbar && kubectl apply -f k8s/jobs/eval-gate-only-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rahbar-eval-gate
+  namespace: rahbar
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels: {app: eval-job}
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: evaluator
+          image: rahbar-eval:dev
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: rahbar-config}
+            - configMapRef: {name: rahbar-gate}
+          env:
+            - {name: EVAL_LABEL, value: "candidate"}
+            - {name: EVAL_MODE, value: "gate-only"}
+            - {name: EVAL_TARGET_URL, value: "http://api-candidate:8000"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: results, mountPath: /results}
+          # F5: the suite is an HTTP client; measured peak in docs/evidence/a3/kubectl-top-under-eval.txt.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - name: results
+          persistentVolumeClaim: {claimName: rahbar-results}

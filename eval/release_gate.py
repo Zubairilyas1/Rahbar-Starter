@@ -1,171 +1,138 @@
-"""Release Gate Enforcement Engine.
-Assignment 03 Part C (RAGOps paper 3.2.2, 4.2, Figure 3).
+#!/usr/bin/env python3
+"""Release gate (Assignment 03 Part C2, RAGOps paper 4.2.5-4.2.6).
 
-Enforces automated gating checks before production deployment:
-1. Recall@5 degradation <= 2.0% (strict retrieval safety)
-2. Faithfulness / Groundedness >= 0.60 (or relative drop <= 5%)
-3. P95 latency <= 25.0s
-4. Abstention correctness = 100.0% (strict safety: 0 hallucinations on out-of-domain)
-5. Citation validity = 100.0% (zero hallucinated citations)
+Compares a candidate's evaluation result file with the baseline's and exits
+0 (RELEASE) or 1 (REJECT). Both files are produced by eval/test_three_levels.py.
 
-Exits with:
-- 0: Release APPROVED (All gates pass)
-- 1: Release BLOCKED (One or more gates fail)
+    python eval/release_gate.py --baseline eval/results/latest_baseline.json \
+                                --candidate eval/results/latest_candidate.json
+
+Threshold precedence: command-line flag > environment variable GATE_<KEY>
+(the `rahbar-gate` ConfigMap on the cluster) > eval/gate_thresholds.yaml.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import time
 from pathlib import Path
+from typing import Any
+
+import yaml
+
+HERE = Path(__file__).resolve().parent
+KEYS = ("max_recall5_drop", "min_faithfulness", "min_abstention_delta",
+        "min_citation_validity", "max_latency_p95_s")
 
 
-def evaluate_gate(
-    baseline_path: Path,
-    candidate_path: Path,
-    max_recall_drop: float = 0.02,
-    min_faithfulness: float = 0.60,
-    max_latency_p95: float = 25.0,
-    min_abstention: float = 100.0,
-    min_citation_validity: float = 100.0,
-) -> tuple[bool, dict]:
-    with open(baseline_path, "r", encoding="utf-8") as f:
-        baseline = json.load(f)
-    with open(candidate_path, "r", encoding="utf-8") as f:
-        candidate = json.load(f)
-
-    b_comp = baseline.get("component_level", {})
-    c_comp = candidate.get("component_level", {})
-    b_e2e = baseline.get("end_to_end_level", {})
-    c_e2e = candidate.get("end_to_end_level", {})
-
-    b_recall5 = b_comp.get("recall_at_5", 0.0)
-    c_recall5 = c_comp.get("recall_at_5", 0.0)
-    recall_delta = c_recall5 - b_recall5
-
-    b_faith = b_e2e.get("faithfulness", 0.0)
-    c_faith = c_e2e.get("faithfulness", 0.0)
-
-    b_p95 = b_e2e.get("latency_p95_s", 0.0)
-    c_p95 = c_e2e.get("latency_p95_s", 0.0)
-
-    b_abst = b_e2e.get("abstention_correctness_pct", 0.0)
-    c_abst = c_e2e.get("abstention_correctness_pct", 0.0)
-
-    b_cit = b_e2e.get("citation_validity_pct", 0.0)
-    c_cit = c_e2e.get("citation_validity_pct", 0.0)
-
-    checks = []
-
-    # Gate 1: Recall@5 degradation
-    g1_pass = recall_delta >= -max_recall_drop
-    checks.append({
-        "gate": "Retrieval Recall@5 Degradation",
-        "threshold": f"Drop <= {max_recall_drop*100:.1f}%",
-        "baseline": f"{b_recall5*100:.2f}%",
-        "candidate": f"{c_recall5*100:.2f}%",
-        "delta": f"{recall_delta*100:+.2f}%",
-        "passed": g1_pass,
-        "detail": "Acceptable" if g1_pass else f"EXCEEDED ALLOWABLE DROP: {recall_delta*100:.2f}% < -{max_recall_drop*100:.1f}%",
-    })
-
-    # Gate 2: Faithfulness
-    g2_pass = c_faith >= min_faithfulness
-    checks.append({
-        "gate": "Answer Faithfulness / Groundedness",
-        "threshold": f">= {min_faithfulness:.2f}",
-        "baseline": f"{b_faith:.4f}",
-        "candidate": f"{c_faith:.4f}",
-        "delta": f"{(c_faith - b_faith):+.4f}",
-        "passed": g2_pass,
-        "detail": "Acceptable" if g2_pass else f"BELOW MINIMUM FAITHFULNESS ({c_faith:.4f} < {min_faithfulness:.2f})",
-    })
-
-    # Gate 3: Latency P95
-    g3_pass = c_p95 <= max_latency_p95
-    checks.append({
-        "gate": "P95 End-to-End Latency",
-        "threshold": f"<= {max_latency_p95:.1f}s",
-        "baseline": f"{b_p95:.2f}s",
-        "candidate": f"{c_p95:.2f}s",
-        "delta": f"{(c_p95 - b_p95):+.2f}s",
-        "passed": g3_pass,
-        "detail": "Acceptable" if g3_pass else f"LATENCY SLA BREACH ({c_p95:.2f}s > {max_latency_p95:.1f}s)",
-    })
-
-    # Gate 4: Honest Abstention Correctness
-    g4_pass = c_abst >= min_abstention
-    checks.append({
-        "gate": "Honest Abstention Correctness",
-        "threshold": f"= {min_abstention:.1f}%",
-        "baseline": f"{b_abst:.1f}%",
-        "candidate": f"{c_abst:.1f}%",
-        "delta": f"{(c_abst - b_abst):+.1f}%",
-        "passed": g4_pass,
-        "detail": "Strict Safety Pass" if g4_pass else f"SAFETY VIOLATION: Abstention dropped to {c_abst:.1f}%",
-    })
-
-    # Gate 5: Citation Validity
-    g5_pass = c_cit >= min_citation_validity
-    checks.append({
-        "gate": "Citation Validity Rate",
-        "threshold": f"= {min_citation_validity:.1f}%",
-        "baseline": f"{b_cit:.1f}%",
-        "candidate": f"{c_cit:.1f}%",
-        "delta": f"{(c_cit - b_cit):+.1f}%",
-        "passed": g5_pass,
-        "detail": "Grounded Citations Verified" if g5_pass else f"HALLUCINATED CITATIONS DETECTED ({c_cit:.1f}%)",
-    })
-
-    all_passed = all(c["passed"] for c in checks)
-    return all_passed, {"checks": checks, "all_passed": all_passed}
+def load_thresholds(path: Path, overrides: dict[str, float | None]) -> tuple[dict[str, float], dict[str, str]]:
+    values: dict[str, float] = {}
+    source: dict[str, str] = {}
+    if path.exists():
+        for k, v in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).items():
+            if k in KEYS:
+                values[k], source[k] = float(v), path.name
+    for k in KEYS:
+        env = os.environ.get(f"GATE_{k.upper()}")
+        if env not in (None, ""):
+            values[k], source[k] = float(env), f"env GATE_{k.upper()}"
+        if overrides.get(k) is not None:
+            values[k], source[k] = float(overrides[k]), "cli"  # type: ignore[arg-type]
+    missing = [k for k in KEYS if k not in values]
+    if missing:
+        raise SystemExit(f"gate thresholds missing: {missing}")
+    return values, source
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Evaluate RAG pipeline release gate")
-    parser.add_argument("--baseline", type=Path, default=Path("eval/results/three_level_eval.json"), help="Baseline eval JSON")
-    parser.add_argument("--candidate", type=Path, required=True, help="Candidate eval JSON")
-    parser.add_argument("--max-recall-drop", type=float, default=0.02, help="Maximum allowed Recall@5 degradation (default: 0.02)")
-    parser.add_argument("--min-faithfulness", type=float, default=0.60, help="Minimum faithfulness threshold (default: 0.60)")
-    parser.add_argument("--max-latency-p95", type=float, default=25.0, help="Maximum P95 latency in seconds (default: 25.0)")
-    args = parser.parse_args()
+def _get(result: dict[str, Any], level: str, key: str) -> float | None:
+    v = result.get(level, {}).get(key)
+    return None if v is None else float(v)
 
-    if not args.baseline.exists():
-        print(f"Error: Baseline file not found: {args.baseline}")
-        return 1
-    if not args.candidate.exists():
-        print(f"Error: Candidate file not found: {args.candidate}")
-        return 1
 
-    passed, report = evaluate_gate(
-        args.baseline,
-        args.candidate,
-        max_recall_drop=args.max_recall_drop,
-        min_faithfulness=args.min_faithfulness,
-        max_latency_p95=args.max_latency_p95,
-    )
+def evaluate(baseline: dict[str, Any], candidate: dict[str, Any], th: dict[str, float]) -> list[dict[str, Any]]:
+    b_r5, c_r5 = _get(baseline, "component_level", "recall_at_5"), _get(candidate, "component_level", "recall_at_5")
+    c_faith = _get(candidate, "end_to_end_level", "faithfulness")
+    b_abs = _get(baseline, "end_to_end_level", "abstention_correctness")
+    c_abs = _get(candidate, "end_to_end_level", "abstention_correctness")
+    c_cit = _get(candidate, "end_to_end_level", "citation_validity")
+    c_p95 = _get(candidate, "end_to_end_level", "latency_p95_s")
 
-    print("\n" + "=" * 95)
-    print("RAHBAR RAGOps: Continuous Integration Release Gate Report (Part C)")
-    print("=" * 95)
-    print(f"Baseline:  {args.baseline}")
-    print(f"Candidate: {args.candidate}")
-    print("-" * 95)
-    print(f"{'Gate / Metric':<35} | {'Threshold':<14} | {'Baseline':<10} | {'Candidate':<10} | {'Delta':<9} | {'Status':<6}")
-    print("-" * 95)
+    def check(name: str, rule: str, base: Any, cand: Any, ok: bool) -> dict[str, Any]:
+        return {"check": name, "rule": rule, "baseline": base, "candidate": cand, "passed": bool(ok)}
 
-    for c in report["checks"]:
-        status_str = "PASS" if c["passed"] else "FAIL"
-        print(f"{c['gate']:<35} | {c['threshold']:<14} | {c['baseline']:<10} | {c['candidate']:<10} | {c['delta']:<9} | {status_str:<6}")
+    return [
+        check("recall@5 drop", f"candidate >= baseline - {th['max_recall5_drop']:.2f}", b_r5, c_r5,
+              c_r5 is not None and b_r5 is not None and c_r5 >= b_r5 - th["max_recall5_drop"] - 1e-9),
+        check("faithfulness", f">= {th['min_faithfulness']:.2f}",
+              _get(baseline, "end_to_end_level", "faithfulness"), c_faith,
+              c_faith is not None and c_faith >= th["min_faithfulness"]),
+        check("abstention correctness", f">= baseline + {th['min_abstention_delta']:.2f}", b_abs, c_abs,
+              c_abs is not None and b_abs is not None and c_abs >= b_abs + th["min_abstention_delta"] - 1e-9),
+        check("citation validity", f">= {th['min_citation_validity']:.2f}",
+              _get(baseline, "end_to_end_level", "citation_validity"), c_cit,
+              c_cit is not None and c_cit >= th["min_citation_validity"]),
+        check("latency p95 (s)", f"<= {th['max_latency_p95_s']:.1f}",
+              _get(baseline, "end_to_end_level", "latency_p95_s"), c_p95,
+              c_p95 is not None and c_p95 <= th["max_latency_p95_s"]),
+    ]
 
-    print("=" * 95)
-    if passed:
-        print(">>> RELEASE DECISION: [APPROVED] - All gating criteria met. Deploying candidate to cluster.")
-        print("=" * 95 + "\n")
-        return 0
-    else:
-        print(">>> RELEASE DECISION: [BLOCKED] - Candidate failed one or more regression gates. Deployment aborted.")
-        print("=" * 95 + "\n")
-        return 1
+
+def _f(v: Any) -> str:
+    return "n/a" if v is None else (f"{v:.4f}" if isinstance(v, float) else str(v))
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Apply the release gate to a candidate evaluation result")
+    ap.add_argument("--baseline", default=os.environ.get("GATE_BASELINE", str(HERE / "results" / "latest_baseline.json")))
+    ap.add_argument("--candidate", default=os.environ.get("GATE_CANDIDATE", str(HERE / "results" / "latest_candidate.json")))
+    ap.add_argument("--thresholds", default=os.environ.get("GATE_THRESHOLDS_FILE", str(HERE / "gate_thresholds.yaml")))
+    ap.add_argument("--out-dir", default=os.environ.get("RESULTS_DIR", str(HERE / "results")))
+    for k in KEYS:
+        ap.add_argument(f"--{k.replace('_', '-')}", type=float, default=None)
+    args = ap.parse_args()
+
+    th, src = load_thresholds(Path(args.thresholds), {k: getattr(args, k) for k in KEYS})
+    try:
+        baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8"))
+        candidate = json.loads(Path(args.candidate).read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        print(f"GATE ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    checks = evaluate(baseline, candidate, th)
+    passed = all(c["passed"] for c in checks)
+
+    bt, ct = baseline.get("target", {}), candidate.get("target", {})
+    print("=" * 96)
+    print("RAHBAR release gate (Part C2)")
+    print(f"baseline : {args.baseline}  [{bt.get('collection')} | {baseline.get('timestamp')}]")
+    print(f"candidate: {args.candidate}  [{ct.get('collection')} | {candidate.get('timestamp')}]")
+    print("thresholds: " + ", ".join(f"{k}={th[k]} ({src[k]})" for k in KEYS))
+    print("-" * 96)
+    print(f"{'check':<24} {'rule':<34} {'baseline':>10} {'candidate':>10}  result")
+    for c in checks:
+        print(f"{c['check']:<24} {c['rule']:<34} {_f(c['baseline']):>10} {_f(c['candidate']):>10}  "
+              f"{'PASS' if c['passed'] else 'FAIL'}")
+    print("-" * 96)
+    decision = "RELEASE" if passed else "REJECT"
+    failed = [c["check"] for c in checks if not c["passed"]]
+    print(f"GATE RESULT: {'PASS' if passed else 'FAIL'} -> {decision}" + (f"  (failed: {', '.join(failed)})" if failed else ""))
+    print("=" * 96)
+
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    record = {"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "decision": decision,
+              "passed": passed, "thresholds": th, "threshold_source": src, "checks": checks,
+              "baseline": args.baseline, "candidate": args.candidate,
+              "candidate_label": candidate.get("label"), "candidate_collection": ct.get("collection")}
+    gate_file = out_dir / f"gate_{candidate.get('label', 'candidate')}_{stamp}.json"
+    gate_file.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    print(f"gate record: {gate_file}")
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

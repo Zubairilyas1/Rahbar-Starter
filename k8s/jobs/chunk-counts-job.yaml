@@ -1,0 +1,56 @@
+# Prints the chunk count per document id in the collection (A2 orphan proof): after
+# a document is deleted from the data lake and ingestion re-runs, it must be absent.
+#   kubectl delete job rahbar-chunk-counts -n rahbar --ignore-not-found
+#   kubectl apply -f k8s/jobs/chunk-counts-job.yaml && kubectl logs -f job/rahbar-chunk-counts -n rahbar
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rahbar-chunk-counts
+  namespace: rahbar
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 7200   # first full ingestion OCRs scanned PDFs on CPU
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: rahbar-indexer}
+    spec:
+      serviceAccountName: rahbar-indexer
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: indexer
+          image: rahbar-indexer:dev   # overlays pin this to a real tag/SHA
+          imagePullPolicy: IfNotPresent
+          args: ["--counts"]
+          envFrom: [{configMapRef: {name: rahbar-config}}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: datalake, mountPath: /datalake}
+            - {name: results, mountPath: /results}
+          # F5: sized from the measured peak of a full first ingestion (OCR + embedding
+          # batches); see docs/evidence/a3/kubectl-top-indexer.txt.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 320Mi
+            limits:
+              cpu: 2000m
+              memory: 768Mi
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - name: datalake
+          persistentVolumeClaim: {claimName: rahbar-datalake}
+        - name: results
+          persistentVolumeClaim: {claimName: rahbar-results}

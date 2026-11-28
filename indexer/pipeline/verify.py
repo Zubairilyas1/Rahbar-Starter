@@ -5,7 +5,7 @@ Evaluates every document against four required checks:
 1. Quality: empty, garbled, or failed extraction.
 2. Completeness: required metadata present (source, title, date/doc_version, page_count); text not truncated.
 3. Recency: checks whether a newer version of the same policy is detected.
-4. Uniqueness: exact duplicates by hash, near-duplicates by content similarity.
+4. Uniqueness: exact duplicates by hash, near-duplicates by embedding cosine similarity.
 
 Failed documents are moved to quarantine and excluded from indexing.
 Produces a verification report file per run in eval/results/.
@@ -16,9 +16,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import re
 import shutil
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -44,6 +46,7 @@ class DocumentVerification:
     quarantine_path: str | None = None
     hash_sha256: str = ""
     doc_version: str = ""
+    supersedes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -147,8 +150,22 @@ def check_completeness(doc: Document, raw_text: str, metadata: dict[str, Any]) -
     if "[TRUNCATED]" in stripped or "[CONTENT CUT OFF]" in stripped:
         return CheckResult("completeness", False, "Document contains explicit truncation marker")
     
-    # Check if the document ends abruptly mid-sentence
-    # Only flag if the last line is a full prose sentence (> 4 words) that ends abruptly without punctuation
+    # PDFs: "not truncated" means every page in the file was extracted and the last
+    # page has text. Their last line is usually a footer ("2026/350", a title), so the
+    # sentence-end heuristic below would quarantine real handbooks (it did, on our
+    # first cluster run).
+    expected_pages = metadata.get("expected_pages")
+    if expected_pages is not None:
+        if len(doc.pages) < int(expected_pages):
+            return CheckResult("completeness", False,
+                               f"Extraction truncated: {len(doc.pages)} of {expected_pages} pages extracted")
+        if not doc.pages[-1].text.strip():
+            return CheckResult("completeness", False, "Last page extracted empty (truncated or failed extraction)")
+        return CheckResult("completeness", True,
+                           f"Completeness verified: metadata present, all {expected_pages} pages extracted")
+
+    # Text/Markdown/HTML: flag a last line that is a prose sentence (> 4 words)
+    # ending without punctuation, or a cut-off word.
     lines = [line.strip() for line in stripped.splitlines() if line.strip()]
     if lines:
         last_line = lines[-1]
@@ -162,101 +179,197 @@ def check_completeness(doc: Document, raw_text: str, metadata: dict[str, Any]) -
     return CheckResult("completeness", True, "Completeness verified: all metadata present and text not truncated")
 
 
-def check_recency(doc: Document, metadata: dict[str, Any], seen_versions: dict[str, str]) -> CheckResult:
-    """Check 3: Recency (detect if a newer version of the same policy already exists)."""
-    # Identify canonical policy name (stripping leading doc numbering and trailing date tags)
-    stem = Path(doc.source).stem.lower()
-    stem = re.sub(r"^doc\d+[-_]", "", stem)
-    canonical_name = re.sub(r"[-_](20\d\d|aug|jun|fall|spring|v\d+).*", "", stem)
-    
-    current_ver = str(doc.doc_version or metadata.get("doc_version", "")).strip()
-    
-    if canonical_name in seen_versions:
-        existing_ver = seen_versions[canonical_name]
-        # Compare versions (simple numerical/chronological comparison)
-        if existing_ver > current_ver and current_ver != "":
-            return CheckResult(
-                "recency",
-                False,
-                f"Recency conflict: a newer version '{existing_ver}' of policy '{canonical_name}' is already active, incoming is older '{current_ver}'"
-            )
-    else:
-        if current_ver and current_ver != "unknown":
-            seen_versions[canonical_name] = current_ver
+def canonical_name(source: str) -> str:
+    """The policy a file is a version of: strip a leading 'docNN-' and any trailing
+    date/version tag, so 'doc09-campus-wifi-policy-2024-outdated.md' and
+    'doc01-campus-wifi-policy-2026.md' both map to 'campus-wifi-policy'.
 
-    return CheckResult("recency", True, "Recency verified: current active version or no newer conflict")
+    A reporting-period suffix such as 'annual-report-2019-20' names a different
+    report (a series member), not a version, so it is kept as part of the name."""
+    stem = Path(source).stem.lower()
+    stem = re.sub(r"^doc\d+[-_]", "", stem)
+    if re.search(r"[-_](19|20)\d\d-\d\d$", stem):
+        return stem
+    return re.sub(r"[-_](20\d\d|aug|jun|fall|spring|v\d+).*", "", stem)
+
+
+def _version_key(version: str) -> str:
+    v = str(version or "").strip().lower()
+    return "" if v in {"", "unknown", "none"} else v
+
+
+def check_recency(
+    doc: Document,
+    metadata: dict[str, Any],
+    newest_versions: dict[str, tuple[str, str]],
+) -> CheckResult:
+    """Check 3: Recency. `newest_versions` maps a canonical policy name to the newest
+    (version, source) seen across the already-indexed corpus AND this batch, so the
+    result does not depend on the order files arrive in. An incoming document fails
+    when a newer version of the same policy exists; it passes (and will supersede the
+    older indexed one) when it is itself the newest."""
+    name = canonical_name(doc.source)
+    current_ver = _version_key(doc.doc_version or metadata.get("doc_version", ""))
+    newest = newest_versions.get(name)
+    if doc.superseded:
+        # Deliberately kept historical version (marked superseded in its metadata):
+        # indexed with superseded=True, so the retrieval filter excludes it by default.
+        return CheckResult("recency", True,
+                           "Recency: explicitly marked superseded; indexed as an archived version")
+    if newest and current_ver and newest[0] > current_ver and newest[1] != doc.source:
+        return CheckResult(
+            "recency",
+            False,
+            f"Recency conflict: newer version '{newest[0]}' of policy '{name}' exists "
+            f"({newest[1]}); incoming version is '{current_ver}'",
+        )
+    return CheckResult("recency", True, "Recency verified: this is the newest known version of the document")
+
+
+def cosine(v1: list[float], v2: list[float]) -> float:
+    dot = sum(a * b for a, b in zip(v1, v2))
+    n1 = math.sqrt(sum(a * a for a in v1))
+    n2 = math.sqrt(sum(b * b for b in v2))
+    return dot / (n1 * n2) if n1 and n2 else 0.0
+
+
+def doc_embedding_text(raw_text: str, limit: int = 2000) -> str:
+    """The text a whole-document embedding is computed from (body, first `limit` chars)."""
+    return re.sub(r"\s+", " ", _strip_frontmatter(raw_text)).strip()[:limit]
 
 
 def check_uniqueness(
     doc: Document,
     raw_text: str,
     seen_hashes: dict[str, str],
-    seen_texts: dict[str, str],
-    near_dup_threshold: float = 0.80,
+    seen_vectors: dict[str, list[float]],
+    doc_vector: list[float] | None,
+    near_dup_threshold: float = 0.95,
+    seen_texts: dict[str, str] | None = None,
 ) -> tuple[CheckResult, str]:
-    """Check 4: Uniqueness (exact duplicates by hash, near-duplicates by similarity)."""
+    """Check 4: Uniqueness. Exact duplicates by normalised content hash; near-duplicates
+    by cosine similarity of whole-document embeddings (pinned EMBED_MODEL). The
+    seen_* maps already hold every indexed document, so a Batch B file that copies a
+    document from the first batch is caught too. If no embedder is available (offline
+    unit tests) it falls back to word-shingle Jaccard and says so in the reason."""
     content_hash = compute_content_hash(raw_text)
-    
-    # 1. Exact duplicate check
+
     if content_hash in seen_hashes:
-        original_doc = seen_hashes[content_hash]
         return (
-            CheckResult("uniqueness", False, f"Exact duplicate of '{original_doc}' (identical SHA-256 content hash: {content_hash[:12]})"),
-            content_hash
+            CheckResult("uniqueness", False,
+                        f"Exact duplicate of '{seen_hashes[content_hash]}' (identical SHA-256 content hash {content_hash[:12]})"),
+            content_hash,
         )
-    
-    # 2. Near duplicate check
-    for existing_source, existing_text in seen_texts.items():
-        sim_3 = compute_jaccard_similarity(raw_text, existing_text, k=3)
-        sim_1 = compute_jaccard_similarity(raw_text, existing_text, k=1)
-        if sim_3 >= near_dup_threshold or sim_1 >= 0.90:
-            pct = max(sim_3, sim_1) * 100
+
+    if doc_vector is not None:
+        best_src, best_sim = None, 0.0
+        for src, vec in seen_vectors.items():
+            sim = cosine(doc_vector, vec)
+            if sim > best_sim:
+                best_src, best_sim = src, sim
+        if best_src is not None and best_sim >= near_dup_threshold:
             return (
-                CheckResult("uniqueness", False, f"Near-duplicate of '{existing_source}' with {pct:.1f}% word/shingle similarity (&ge; 85%)"),
-                content_hash
+                CheckResult("uniqueness", False,
+                            f"Near-duplicate of '{best_src}': embedding cosine {best_sim:.4f} >= {near_dup_threshold:.2f}"),
+                content_hash,
             )
-            
-    # Record current document
+        seen_vectors[doc.source] = doc_vector
+    elif seen_texts is not None:
+        for src, text in seen_texts.items():
+            sim = max(compute_jaccard_similarity(raw_text, text, k=3), compute_jaccard_similarity(raw_text, text, k=1) - 0.10)
+            if sim >= 0.80:
+                return (
+                    CheckResult("uniqueness", False,
+                                f"Near-duplicate of '{src}': shingle Jaccard {sim:.2f} (embedder unavailable, fallback)"),
+                    content_hash,
+                )
+        seen_texts[doc.source] = raw_text
+
     seen_hashes[content_hash] = doc.source
-    seen_texts[doc.source] = raw_text
-    return (CheckResult("uniqueness", True, "Uniqueness verified: content is novel and distinct"), content_hash)
+    return CheckResult("uniqueness", True, "Uniqueness verified: no exact or near-duplicate found"), content_hash
+
+
+EmbedFn = Callable[[list[str]], list[list[float]]]
 
 
 def verify_and_quarantine(
     documents: list[tuple[Document, Path, dict[str, Any]]],
     quarantine_dir: str | Path = "corpus/quarantine",
     report_path: str | Path = "eval/results/verification_report.json",
+    known_docs: dict[str, dict[str, Any]] | None = None,
+    embed_fn: EmbedFn | None = None,
+    near_dup_threshold: float = 0.95,
 ) -> tuple[list[Document], VerificationReport]:
-    """Runs all 4 verification checks on each extracted document.
-    
-    Failing documents are copied/moved to quarantine_dir and excluded from the returned list.
-    Outputs a structured VerificationReport.
+    """Run the four checks on each extracted document (after extraction, before chunking).
+
+    known_docs: the already-indexed documents from the ingestion state
+        ({source: {"text_hash", "doc_embedding", "doc_version"}}), so duplicates and
+        older versions are judged against the whole data lake, not only this batch.
+    embed_fn: embeds whole documents for the near-duplicate check.
+
+    Failing documents are moved to quarantine_dir and are not returned. Every
+    passing document gets `doc.verification` metadata (hash, embedding, supersedes).
     """
     quarantine_path = Path(quarantine_dir)
     quarantine_path.mkdir(parents=True, exist_ok=True)
-    
     Path(report_path).parent.mkdir(parents=True, exist_ok=True)
+    known_docs = known_docs or {}
+
+    seen_hashes: dict[str, str] = {}
+    seen_vectors: dict[str, list[float]] = {}
+    seen_texts: dict[str, str] | None = None if embed_fn else {}
+    newest_versions: dict[str, tuple[str, str]] = {}
+
+    def note_version(source: str, version: str) -> None:
+        v = _version_key(version)
+        if not v:
+            return
+        name = canonical_name(source)
+        if name not in newest_versions or v > newest_versions[name][0]:
+            newest_versions[name] = (v, source)
+
+    for src, rec in known_docs.items():
+        if rec.get("superseded"):
+            continue
+        if rec.get("text_hash"):
+            seen_hashes[rec["text_hash"]] = src
+        if rec.get("doc_embedding"):
+            seen_vectors[src] = rec["doc_embedding"]
+        note_version(src, str(rec.get("doc_version", "")))
+    for doc, _, meta in documents:
+        note_version(doc.source, doc.doc_version or str(meta.get("doc_version", "")))
+
+    raw_texts = ["\n\n".join(p.text for p in doc.pages) for doc, _, _ in documents]
+    vectors: list[list[float] | None] = [None] * len(documents)
+    if embed_fn and documents:
+        try:
+            embedded = embed_fn([doc_embedding_text(t) or " " for t in raw_texts])
+            vectors = list(embedded)
+        except Exception as exc:  # embedder down: fall back, but say so in the report
+            log.warning("document embedding failed, using shingle fallback: %s", exc)
+            seen_texts = {}
 
     passed_docs: list[Document] = []
     report_items: list[DocumentVerification] = []
 
-    seen_hashes: dict[str, str] = {}
-    seen_texts: dict[str, str] = {}
-    seen_versions: dict[str, str] = {}
-
-    for doc, file_path, meta in documents:
-        raw_text = "\n\n".join(p.text for p in doc.pages)
-        
-        # Run 4 checks
+    for (doc, file_path, meta), raw_text, vec in zip(documents, raw_texts, vectors):
         res_quality = check_quality(doc, raw_text)
-        res_completeness = check_completeness(doc, raw_text, meta)
-        res_recency = check_recency(doc, meta, seen_versions)
-        res_uniqueness, content_hash = check_uniqueness(doc, raw_text, seen_hashes, seen_texts)
+        if file_path.suffix.lower() == ".pdf" and file_path.exists() and "expected_pages" not in meta:
+            try:
+                import pypdf
 
+                meta["expected_pages"] = len(pypdf.PdfReader(str(file_path)).pages)
+            except Exception as exc:  # unreadable PDF: let quality/completeness judge the text
+                log.warning("could not count pages of %s: %s", file_path.name, exc)
+        res_completeness = check_completeness(doc, raw_text, meta)
+        res_recency = check_recency(doc, meta, newest_versions)
+        res_uniqueness, content_hash = check_uniqueness(
+            doc, raw_text, seen_hashes, seen_vectors, vec, near_dup_threshold, seen_texts
+        )
         checks = [res_quality, res_completeness, res_recency, res_uniqueness]
         all_passed = all(c.passed for c in checks)
 
-        doc_ver = DocumentVerification(
+        item = DocumentVerification(
             source=doc.source,
             passed=all_passed,
             checks=checks,
@@ -265,24 +378,38 @@ def verify_and_quarantine(
         )
 
         if all_passed:
+            name = canonical_name(doc.source)
+            superseded_src = [
+                s for s, rec in known_docs.items()
+                if not rec.get("superseded") and s != doc.source and canonical_name(s) == name
+                and _version_key(str(rec.get("doc_version", ""))) < _version_key(doc.doc_version)
+            ]
+            doc.verification = {
+                "text_hash": content_hash,
+                "doc_embedding": vec,
+                "supersedes": superseded_src,
+            }
+            if superseded_src:
+                item.supersedes = superseded_src
             passed_docs.append(doc)
             log.info("verification passed for %s", doc.source)
         else:
-            # Quarantine document
-            doc_ver.quarantined = True
+            item.quarantined = True
             dest_file = quarantine_path / Path(doc.source).name
             try:
                 if file_path.exists():
+                    shutil.move(str(file_path), dest_file)
+            except Exception as e:  # read-only source (e.g. image-baked batch): copy instead
+                log.warning("move to quarantine failed (%s), copying", e)
+                try:
                     shutil.copy2(file_path, dest_file)
-                    doc_ver.quarantine_path = str(dest_file)
-            except Exception as e:
-                log.warning("could not copy to quarantine: %s", str(e))
-                doc_ver.quarantine_path = str(dest_file)
-            
-            reasons = [c.reason for c in checks if not c.passed]
-            log.warning("verification failed -> quarantined: %s (%s)", doc.source, reasons)
+                except Exception as e2:
+                    log.warning("could not copy to quarantine: %s", e2)
+            item.quarantine_path = str(dest_file)
+            log.warning("verification failed -> quarantined: %s (%s)", doc.source,
+                        [c.reason for c in checks if not c.passed])
 
-        report_items.append(doc_ver)
+        report_items.append(item)
 
     report = VerificationReport(
         timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -291,10 +418,25 @@ def verify_and_quarantine(
         quarantined_documents=len(documents) - len(passed_docs),
         results=report_items,
     )
-
-    # Save report
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(asdict(report), f, indent=2)
-    log.info("verification report written to %s (passed: %d, quarantined: %d)", str(report_path), report.passed_documents, report.quarantined_documents)
-
+    log.info("verification report written to %s (passed: %d, quarantined: %d)",
+             str(report_path), report.passed_documents, report.quarantined_documents)
     return passed_docs, report
+
+
+def format_report_table(report: VerificationReport) -> str:
+    """A terminal table: one row per document, P/F per check (Q/C/R/U), reasons."""
+    lines = [
+        f"Verification report  total={report.total_documents}  passed={report.passed_documents}  "
+        f"quarantined={report.quarantined_documents}",
+        f"{'document':<46} {'Q':^3}{'C':^3}{'R':^3}{'U':^3} {'result':<11} reason",
+        "-" * 120,
+    ]
+    for r in report.results:
+        flags = "".join(f"{'P' if c.passed else 'F':^3}" for c in r.checks)
+        reasons = "; ".join(c.reason for c in r.checks if not c.passed)
+        if not reasons and r.supersedes:
+            reasons = f"supersedes {', '.join(r.supersedes)} (archived)"
+        lines.append(f"{r.source[:46]:<46} {flags} {'PASS' if r.passed else 'QUARANTINE':<11} {reasons}")
+    return "\n".join(lines)

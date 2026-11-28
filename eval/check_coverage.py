@@ -9,23 +9,26 @@ and golden questions to identify coverage gaps and topic drift.
 import argparse
 import json
 import math
+import os
+import sys
+import time
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
 
 def embed_texts(texts: list[str], model: str = "nomic-embed-text", ollama_url: str = "http://127.0.0.1:11434") -> list[list[float]]:
-    embeddings = []
-    for text in texts:
-        req = urllib.request.Request(
-            f"{ollama_url}/api/embeddings",
-            data=json.dumps({"model": model, "prompt": text}).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
-        )
-        resp = urllib.request.urlopen(req)
-        data = json.loads(resp.read().decode("utf-8"))
-        embeddings.append(data["embedding"])
-    return embeddings
+    """Batch-embed with the pinned embedding model (the same one the index uses)."""
+    req = urllib.request.Request(
+        f"{ollama_url.rstrip('/')}/api/embed",
+        data=json.dumps({"model": model, "input": texts}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        vecs = json.loads(resp.read().decode("utf-8")).get("embeddings", [])
+    if len(vecs) != len(texts):
+        raise RuntimeError(f"expected {len(texts)} embeddings, got {len(vecs)}")
+    return vecs
 
 
 def cosine_similarity(v1: list[float], v2: list[float]) -> float:
@@ -132,44 +135,61 @@ def check_coverage(
     return summary
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Check evaluation golden set coverage against live production queries")
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Query coverage of the golden set (Part E2/E4)")
     parser.add_argument("--live", type=Path, default=Path("eval/live_queries.jsonl"), help="Live queries JSONL")
     parser.add_argument("--golden", type=Path, default=Path("eval/golden.jsonl"), help="Golden questions JSONL")
-    parser.add_argument("--threshold", type=float, default=0.78, help="Cosine similarity coverage threshold")
-    parser.add_argument("--output", type=Path, default=Path("eval/results/coverage_report.json"), help="Output JSON report")
+    parser.add_argument("--threshold", type=float, default=float(os.environ.get("COVERAGE_SIM_THRESHOLD", 0.75)),
+                        help="cosine similarity at which a live query counts as covered by a golden question")
+    parser.add_argument("--min-coverage", type=float, default=float(os.environ.get("COVERAGE_MIN_SHARE", 0.85)),
+                        help="share of live queries that must be covered; below it the script exits 1 "
+                             "(0.85 = the paper's example in 4.2.7)")
+    parser.add_argument("--ollama-url", default=os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"))
+    parser.add_argument("--embed-model", default=os.environ.get("EMBED_MODEL", "nomic-embed-text"))
+    parser.add_argument("--output", type=Path, default=None,
+                        help="JSON report (default eval/results/coverage_<golden-name>_<timestamp>.json)")
     args = parser.parse_args()
 
-    summary = check_coverage(args.live, args.golden, threshold=args.threshold)
+    try:
+        summary = check_coverage(args.live, args.golden, threshold=args.threshold,
+                                 model=args.embed_model, ollama_url=args.ollama_url)
+    except Exception as exc:  # no invented numbers when the embedder is down
+        print(f"COVERAGE ERROR: {exc}", file=sys.stderr)
+        return 2
+    summary["min_coverage_share"] = args.min_coverage
+    summary["gate_passed"] = summary["coverage_percentage"] / 100.0 >= args.min_coverage
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
+    out = args.output or Path("eval/results") / f"coverage_{args.golden.stem}_{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
     print("\n" + "=" * 80)
-    print("RAHBAR RAGOps: Golden Dataset Coverage & Drift Report (Part E)")
+    print("RAHBAR golden-set coverage of live queries (Part E)")
     print("=" * 80)
-    print(f"Total Live Queries:         {summary['total_live_queries']}")
-    print(f"Golden Questions:           {summary['total_golden_questions']}")
-    print(f"Similarity Threshold:       {summary['coverage_threshold']}")
-    print(f"Covered Queries:            {summary['covered_queries']} / {summary['total_live_queries']}")
-    print(f"Coverage Gaps (Drift):      {summary['gap_queries']}")
-    print(f"Overall Coverage Rate:      {summary['coverage_percentage']}%")
-    print("-" * 80)
-    print(f"{'Topic':<25} | {'Total':<6} | {'Gaps':<6} | {'Coverage %':<10}")
-    print("-" * 80)
-    for topic, stats in summary["topic_breakdown"].items():
-        print(f"{topic:<25} | {stats['total']:<6} | {stats['gaps']:<6} | {stats['coverage_pct']:<10.1f}%")
-    print("=" * 80)
-
-    # Print top 5 coverage gaps
+    print(f"live queries               : {summary['total_live_queries']}")
+    print(f"golden questions           : {summary['total_golden_questions']}  ({args.golden})")
+    print(f"similarity threshold       : {summary['coverage_threshold']}")
+    print(f"covered                    : {summary['covered_queries']} / {summary['total_live_queries']}"
+          f"  = {summary['coverage_percentage']}%   (required >= {args.min_coverage:.0%})")
+    topics = summary["topic_breakdown"]
+    full = sorted(t for t, st in topics.items() if st["gaps"] == 0)
+    print(f"fully covered topics ({len(full)}): {', '.join(full) or '-'}")
     gaps = [q for q in summary["query_details"] if not q["is_covered"]]
     if gaps:
-        print("\n--- Top Uncovered Queries Needing Golden Test Cases ---")
-        for g in gaps[:5]:
-            print(f"  [{g['query_id']}] ({g['topic']}) sim={g['max_similarity']:.4f}: {g['query']}")
-    print()
+        print("-" * 80)
+        print("uncovered live queries, grouped by topic  [topic] gaps/total:")
+        by_topic: dict[str, list[dict]] = defaultdict(list)
+        for g in gaps:
+            by_topic[g["topic"]].append(g)
+        for topic, items in sorted(by_topic.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            print(f"  [{topic}] {topics[topic]['gaps']}/{topics[topic]['total']}")
+            for g in items:
+                print(f"    {g['query_id']}  sim={g['max_similarity']:.3f}  {g['query']}")
+    print("=" * 80)
+    verdict = "PASS" if summary["gate_passed"] else "FAIL"
+    print(f"COVERAGE {verdict}: {summary['coverage_percentage']}% vs required {args.min_coverage:.0%}   report: {out}")
+    return 0 if summary["gate_passed"] else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

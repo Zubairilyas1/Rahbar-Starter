@@ -1,0 +1,17 @@
+# Promote the gate-approved candidate to the LIVE api Deployment (F3). Only after
+# k8s/eval-job.yaml completed successfully (gate PASS):
+#   kubectl patch deployment api -n rahbar --patch-file k8s/release/promote-c600-patch.yaml
+#   kubectl rollout status deployment/api -n rahbar        # rolling update, maxUnavailable: 0
+#   kubectl rollout history deployment/api -n rahbar
+metadata:
+  annotations:
+    kubernetes.io/change-cause: "release: rahbar_c600 (chunk 600 / overlap 100), gate PASSED"
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          env:
+            - {name: PIPELINE_VERSION, value: "release-c600"}
+            - {name: CHROMA_COLLECTION, value: "rahbar_c600"}
+            - {name: COLLECTION_VERSION, value: "c600-o100"}

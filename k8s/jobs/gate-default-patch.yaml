@@ -1,0 +1,5 @@
+# Restores the default thresholds of k8s/base/gate-configmap.yaml.
+#   kubectl patch configmap rahbar-gate -n rahbar --patch-file k8s/jobs/gate-default-patch.yaml
+data:
+  GATE_MAX_LATENCY_P95_S: "90.0"
+  GATE_MIN_FAITHFULNESS: "0.80"

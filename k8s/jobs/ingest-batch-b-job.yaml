@@ -1,0 +1,61 @@
+# Ingests Batch B (Assignment 03 A1/A2/E3): 10 documents with planted problems.
+#   kubectl delete job rahbar-ingest-batch-b -n rahbar --ignore-not-found
+#   kubectl apply -f k8s/jobs/ingest-batch-b-job.yaml
+#   kubectl logs -f job/rahbar-ingest-batch-b -n rahbar      # verification table per document
+# An UNSEEN batch at the demo goes the same way without a special Job:
+#   kubectl cp <folder>/. rahbar/<toolbox-pod>:/datalake/incoming/
+#   kubectl create job --from=cronjob/reindex ingest-unseen -n rahbar
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rahbar-ingest-batch-b
+  namespace: rahbar
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 7200   # first full ingestion OCRs scanned PDFs on CPU
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: rahbar-indexer}
+    spec:
+      serviceAccountName: rahbar-indexer
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: indexer
+          image: rahbar-indexer:dev   # overlays pin this to a real tag/SHA
+          imagePullPolicy: IfNotPresent
+          # Batch B is baked into the image at /batches/batch_b; copy it into the data
+          # lake's incoming/ folder, then run the normal ingestion with verification.
+          command: ["sh", "-c", "mkdir -p /datalake/incoming && cp /batches/batch_b/* /datalake/incoming/ && exec python -m pipeline.run"]
+          envFrom: [{configMapRef: {name: rahbar-config}}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: datalake, mountPath: /datalake}
+            - {name: results, mountPath: /results}
+          # F5: sized from the measured peak of a full first ingestion (OCR + embedding
+          # batches); see docs/evidence/a3/kubectl-top-indexer.txt.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 320Mi
+            limits:
+              cpu: 2000m
+              memory: 768Mi
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - name: datalake
+          persistentVolumeClaim: {claimName: rahbar-datalake}
+        - name: results
+          persistentVolumeClaim: {claimName: rahbar-results}

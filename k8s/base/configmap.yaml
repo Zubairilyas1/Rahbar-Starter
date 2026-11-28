@@ -1,5 +1,10 @@
 # Single source of truth for every tunable (section 4.1). The api and indexer both
 # read EMBED_MODEL from here -- that is the embedding pin (section 4.4).
+#
+# Release provenance (CHROMA_COLLECTION, COLLECTION_VERSION, EMBED_VERSION,
+# PIPELINE_VERSION) is ALSO set on the api Deployment's pod template: a ConfigMap
+# edit does not restart pods, but a pod-template change is a rollout that
+# `kubectl rollout undo` can reverse (Assignment 03 F3).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,20 +14,30 @@ data:
   RETRIEVER: "chroma"
   LLM_PROVIDER: "ollama-host"
   EMBED_MODEL: "nomic-embed-text"
+  EMBED_VERSION: "v1.5"
   CHROMA_HOST: "chroma"
   CHROMA_PORT: "8000"
   CHROMA_COLLECTION: "rahbar"
+  COLLECTION_VERSION: "c400-o50"
   TOP_K: "5"
   RELEVANCE_FLOOR: "0.50"
   TEMPERATURE: "0.2"
+  LLM_SEED: "42"
   LLM_MODEL: "llama3.2:3b"
-  LLM_TIMEOUT: "30.0"
+  # CPU-only Ollama (llama3.2:3b) on the demo laptop: a 2k-token prompt can take
+  # over 30 s; 90 s avoids timeouts being counted as abstentions.
+  LLM_TIMEOUT: "90.0"
   OLLAMA_URL: "http://host.minikube.internal:11434"
   HOSTED_BASE_URL: ""
   REDIS_URL: "redis://redis:6379"
   CACHE_THRESHOLD: "0.85"
   CACHE_TTL: "3600"
   LOG_LEVEL: "INFO"
-  CORPUS_DIR: "/corpus"
+  # Data lake on the rahbar-datalake PVC (indexer Jobs). The image-baked corpus at
+  # /corpus seeds an empty lake once; later batches arrive through incoming/.
+  DATA_LAKE_DIR: "/datalake"
+  SEED_CORPUS_DIR: "/corpus"
+  RESULTS_DIR: "/results"
+  NEAR_DUP_THRESHOLD: "0.95"
   CHUNK_SIZE: "400"
   CHUNK_OVERLAP: "50"

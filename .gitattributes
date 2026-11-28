@@ -1,0 +1,5 @@
+# Binary artefacts: never normalise line endings (a CRLF-converted PDF is corrupt).
+*.pdf binary
+*.png binary
+*.jpg binary
+*.zip binary

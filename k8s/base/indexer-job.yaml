@@ -1,6 +1,15 @@
-# The only writer to Chroma (ADR 0001, docs/ARCHITECTURE.md). One-shot; the API
-# never indexes. Memory limit is 768Mi; a real-corpus peak is not yet captured
-# in docs/evidence/ (see docs/ENGINEERING-NOTES.md Q4).
+# Ingestion with verification (Assignment 03 Part A, F2). The ONLY writer to Chroma
+# (ADR 0001): the api has no write path, and the network policies let only pods
+# labelled app=rahbar-indexer reach Chroma besides the read-only api.
+#
+# Each run: seed an empty data lake from the image once -> take any batch waiting in
+# /datalake/incoming -> diff against the saved state -> verify new/changed documents
+# (quarantine failures) -> update only the changed chunks -> archive superseded
+# versions -> write verification report + run summary to /results.
+#
+# Re-run on demand:  kubectl delete job rahbar-indexer -n rahbar --ignore-not-found
+#                    kubectl apply -f k8s/base/indexer-job.yaml
+# or from the CronJob template:  kubectl create job --from=cronjob/reindex reindex-manual -n rahbar
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -8,7 +17,8 @@ metadata:
   namespace: rahbar
 spec:
   backoffLimit: 3
-  activeDeadlineSeconds: 900
+  activeDeadlineSeconds: 7200   # first full ingestion OCRs scanned PDFs on CPU
+  ttlSecondsAfterFinished: 86400
   template:
     metadata:
       labels: {app: rahbar-indexer}
@@ -34,12 +44,21 @@ spec:
                 - ALL
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
+            - {name: datalake, mountPath: /datalake}
+            - {name: results, mountPath: /results}
+          # F5: measured with docker stats during the first ingestion. With a 500m limit
+          # OCR sat at the cap (~49% of a core), so the limit is 2 CPUs. Memory
+          # peaked well under 768Mi. See docs/evidence/a3/docker-stats-*.txt.
           resources:
             requests:
-              cpu: 200m
+              cpu: 500m
               memory: 320Mi
             limits:
-              cpu: 500m
+              cpu: 2000m
               memory: 768Mi
       volumes:
         - {name: tmp, emptyDir: {}}
+        - name: datalake
+          persistentVolumeClaim: {claimName: rahbar-datalake}
+        - name: results
+          persistentVolumeClaim: {claimName: rahbar-results}

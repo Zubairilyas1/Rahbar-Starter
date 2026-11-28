@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-11-27T18:28:43Z",
+  "collection": "rahbar",
+  "embed_model": "nomic-embed-text",
+  "chunk_size": 400,
+  "chunk_overlap": 50,
+  "seeded": 0,
+  "received": 0,
+  "new": [],
+  "modified": [
+    "doc02-library-digital-resources-2026.md"
+  ],
+  "unchanged": 12,
+  "deleted": [],
+  "purged_chunks": {
+    "doc02-library-digital-resources-2026.md": 4
+  },
+  "quarantined": [],
+  "archived": [],
+  "embedded_chunks": 4,
+  "verification_report": "/results/verification_report_20261127T182842Z.json",
+  "chunks_by_document": {
+    "undergraduate-academic-rules-aug-2023.pdf": 281,
+    "academic-rules-handbook-jun-2026.pdf": 106,
+    "prospectus-2026-academic-rules-and-regulations.pdf": 14,
+    "student-handbook-jun-2026.pdf": 152,
+    "annual-report-2019-20.pdf": 120,
+    "annual-report-2023-24.pdf": 387,
+    "fee-structure-page.html": 34,
+    "grading-page.html": 35,
+    "faculty-entrepreneurship-and-technical-start-ups-policy.pdf": 117,
+    "doc01-campus-wifi-policy-2026.md": 4,
+    "doc03-sports-complex-regulations-2026.md": 4,
+    "doc10-student-portal-guidelines-injected.md": 4,
+    "doc11-faculty-entrepreneurship-and-technical-start-ups-policy-2026.md": 6,
+    "doc02-library-digital-resources-2026.md": 4
+  }
+}

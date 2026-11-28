@@ -12,6 +12,10 @@ from ...schemas import Answer, Citation, Passage
 class StubProvider:
     name = "stub"
 
+    def render_prompt(self, question: str, passages: list[Passage]) -> str:
+        context = "\n".join(f"[{i}] {p.source} p.{p.page}: {p.text}" for i, p in enumerate(passages, 1))
+        return f"[stub]\nPassages:\n{context}\nQuestion: {question}"
+
     def generate(self, question: str, passages: list[Passage]) -> Answer:
         if not passages:
             return Answer(

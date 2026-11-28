@@ -20,7 +20,6 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 log = logging.getLogger("rahbar.indexer.incremental")
 
 STATE_FILE_NAME = ".ingestion_state.json"
@@ -179,23 +178,22 @@ def get_chunks_by_document(client: Any, collection_name: str) -> dict[str, int]:
 
 def archive_superseded_document(
     doc_path: Path,
-    corpus_dir: Path,
+    archive_dir: Path,
     client: Any,
     collection_name: str,
     superseded_by: str,
     state: IngestionState,
 ) -> Path:
-    """Moves an older document to corpus/archive/ and tags its chunks as superseded."""
-    archive_dir = corpus_dir / ARCHIVE_DIR_NAME
+    """Copy an older version into the archive folder and tag its chunks
+    superseded=True, so retrieval excludes them by metadata while they stay
+    restorable. The caller removes the file from the active corpus."""
     archive_dir.mkdir(parents=True, exist_ok=True)
-    
     dest_path = archive_dir / doc_path.name
     shutil.copy2(doc_path, dest_path)
-    
-    # Tag chunks in Chroma as superseded: True
+
     try:
         coll = client.get_collection(name=collection_name)
-        existing = coll.get(where={"source": doc_path.name}, include=["metadatas", "documents"])
+        existing = coll.get(where={"source": doc_path.name}, include=["metadatas"])
         if existing and existing.get("ids"):
             ids = existing["ids"]
             metas = existing["metadatas"]
@@ -217,22 +215,20 @@ def archive_superseded_document(
 
 def rollback_archived_document(
     doc_name: str,
+    archive_dir: Path,
     corpus_dir: Path,
     client: Any,
     collection_name: str,
     state: IngestionState,
 ) -> bool:
-    """Restores an archived document back to the active corpus and marks chunks as active."""
-    archive_dir = corpus_dir / ARCHIVE_DIR_NAME
+    """Restore an archived document to the active corpus and mark its chunks active."""
     archived_file = archive_dir / doc_name
     if not archived_file.exists():
         log.error(f"Cannot rollback: {archived_file} not found in archive")
         return False
 
-    restore_path = corpus_dir / doc_name
-    shutil.copy2(archived_file, restore_path)
+    shutil.move(str(archived_file), corpus_dir / doc_name)
 
-    # Revert Chroma chunk metadata: superseded: False
     try:
         coll = client.get_collection(name=collection_name)
         existing = coll.get(where={"source": doc_name}, include=["metadatas"])
@@ -246,6 +242,5 @@ def rollback_archived_document(
     except Exception as e:
         log.warning(f"Could not revert superseded metadata during rollback: {e}")
 
-    if doc_name in state.archive:
-        del state.archive[doc_name]
+    state.archive.pop(doc_name, None)
     return True

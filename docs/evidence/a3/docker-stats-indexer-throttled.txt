@@ -1,0 +1,10 @@
+# docker stats --no-stream, 2026-11-27T14:26:15Z, first ingestion (OCR) with indexer limit cpu=500m
+POD (container) CPU% MEM
+rahbar-indexer-lhdmx (indexer)	49.96%	162.1MiB / 768MiB
+redis-cc8b8f9-f7b7f (redis)	0.66%	6.16MiB / 256MiB
+ui-946999698-rrd2p (ui)	0.00%	2.195MiB / 128MiB
+ui-946999698-xlrqz (ui)	0.00%	4.582MiB / 128MiB
+api-79bc89c9b6-fjpkj (api)	0.30%	66.5MiB / 512MiB
+api-79bc89c9b6-bsdpn (api)	0.33%	68.57MiB / 512MiB
+api-79bc89c9b6-rwsqh (api)	0.29%	97.1MiB / 512MiB
+chroma-0 (chroma)	0.00%	14.22MiB / 1GiB

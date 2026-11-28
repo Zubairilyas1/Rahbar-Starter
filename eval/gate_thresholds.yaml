@@ -1,0 +1,24 @@
+# Release gate thresholds (Assignment 03 Part C2). eval/release_gate.py reads this
+# file; on the cluster the same keys come from the `rahbar-gate` ConfigMap as
+# environment variables (GATE_<KEY in upper case>), which override this file, so a
+# threshold can be changed with `kubectl edit configmap rahbar-gate` without
+# rebuilding any image. Justifications are written in the report (Part C).
+
+# Retrieval: recall@5 may not drop by more than 2 points (0.02) against the baseline.
+max_recall5_drop: 0.02
+
+# Answers: share of answered questions whose facts are grounded in the retrieved
+# context (deterministic grounding judge); baseline minus a margin.
+min_faithfulness: 0.80
+
+# Abstention correctness on must-abstain questions may not fall below the baseline
+# (0.0 = equal is allowed; a positive value demands improvement).
+min_abstention_delta: 0.0
+
+# Every citation must point at a passage that was actually retrieved.
+min_citation_validity: 0.95
+
+# End-to-end p95 latency, seconds. Measured baseline p95 on our cluster (CPU-only
+# Ollama, llama3.2:3b) was 55 s under load and 28 s idle; 90 s is the generation
+# timeout, beyond which an answer becomes a forced abstention.
+max_latency_p95_s: 90.0

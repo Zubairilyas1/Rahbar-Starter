@@ -1,0 +1,351 @@
+{
+  "timestamp": "2026-11-27T17:15:19Z",
+  "total_documents": 11,
+  "passed_documents": 5,
+  "quarantined_documents": 6,
+  "results": [
+    {
+      "source": "doc01-campus-wifi-policy-2026.md",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "d5dcb279ae8e798e6a07ade62b439bf09fffdbf3f8085801279581e778660cef",
+      "doc_version": "2026-09",
+      "supersedes": []
+    },
+    {
+      "source": "doc02-library-digital-resources-2026.md",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "eba51400ceb1c4af67b1c6460a1d7e5bf05ca5246ca73bd435d8be42757a63e8",
+      "doc_version": "2026-09",
+      "supersedes": []
+    },
+    {
+      "source": "doc03-sports-complex-regulations-2026.md",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "82afedd418c594fa23c659461aa6a0ba023ac76ceac7e428dfacae95fb0f661e",
+      "doc_version": "2026-09",
+      "supersedes": []
+    },
+    {
+      "source": "doc04-campus-wifi-policy-duplicate.md",
+      "passed": false,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": false,
+          "reason": "Exact duplicate of 'doc01-campus-wifi-policy-2026.md' (identical SHA-256 content hash d5dcb279ae8e)"
+        }
+      ],
+      "quarantined": true,
+      "quarantine_path": "/datalake/quarantine/doc04-campus-wifi-policy-duplicate.md",
+      "hash_sha256": "d5dcb279ae8e798e6a07ade62b439bf09fffdbf3f8085801279581e778660cef",
+      "doc_version": "2026-09",
+      "supersedes": []
+    },
+    {
+      "source": "doc05-sports-complex-duplicate.md",
+      "passed": false,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": false,
+          "reason": "Exact duplicate of 'doc03-sports-complex-regulations-2026.md' (identical SHA-256 content hash 82afedd418c5)"
+        }
+      ],
+      "quarantined": true,
+      "quarantine_path": "/datalake/quarantine/doc05-sports-complex-duplicate.md",
+      "hash_sha256": "82afedd418c594fa23c659461aa6a0ba023ac76ceac7e428dfacae95fb0f661e",
+      "doc_version": "2026-09",
+      "supersedes": []
+    },
+    {
+      "source": "doc06-campus-wifi-policy-draft-neardup.md",
+      "passed": false,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": false,
+          "reason": "Near-duplicate of 'doc01-campus-wifi-policy-2026.md': embedding cosine 0.9682 >= 0.95"
+        }
+      ],
+      "quarantined": true,
+      "quarantine_path": "/datalake/quarantine/doc06-campus-wifi-policy-draft-neardup.md",
+      "hash_sha256": "01740c9fd36825bcb4ab651cc587353bd0c012e45508a3631029a804a375e46a",
+      "doc_version": "2026-09",
+      "supersedes": []
+    },
+    {
+      "source": "doc07-hostel-allotment-corrupted.md",
+      "passed": false,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": false,
+          "reason": "Document appears truncated mid-sentence: ends with 'docu' without punctuation"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": true,
+      "quarantine_path": "/datalake/quarantine/doc07-hostel-allotment-corrupted.md",
+      "hash_sha256": "df0cdcef7e36fed6788813fc6faf275b5ef7595e9ffc1574d53d9f71fe733f21",
+      "doc_version": "2026-09",
+      "supersedes": []
+    },
+    {
+      "source": "doc08-unlabeled-cafeteria-guidelines.md",
+      "passed": false,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": false,
+          "reason": "Missing required metadata fields: doc_version"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": true,
+      "quarantine_path": "/datalake/quarantine/doc08-unlabeled-cafeteria-guidelines.md",
+      "hash_sha256": "ae19013274b1e5e1c33d19e208b9059c8d998cbfb2a7e0518bbc6516ffcfc775",
+      "doc_version": "unknown",
+      "supersedes": []
+    },
+    {
+      "source": "doc09-campus-wifi-policy-2024-outdated.md",
+      "passed": false,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": false,
+          "reason": "Recency conflict: newer version '2026-09' of policy 'campus-wifi-policy' exists (doc01-campus-wifi-policy-2026.md); incoming version is '2024-01'"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": true,
+      "quarantine_path": "/datalake/quarantine/doc09-campus-wifi-policy-2024-outdated.md",
+      "hash_sha256": "e0335ad14019bdb49f4f9e14df6864e05aed64fb1ed805d5bc6b4dd6f9805faa",
+      "doc_version": "2024-01",
+      "supersedes": []
+    },
+    {
+      "source": "doc10-student-portal-guidelines-injected.md",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "6efe4a69036dc99c27cb40e74c04e83c6031e340358257de961f18a180f0715a",
+      "doc_version": "2026-09",
+      "supersedes": []
+    },
+    {
+      "source": "doc11-faculty-entrepreneurship-and-technical-start-ups-policy-2026.md",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "a1ee5a81a35a527cab84a234686d80d58c265a611a01f34c3ad563cd8ce0a284",
+      "doc_version": "2026-10",
+      "supersedes": [
+        "faculty-entrepreneurship-and-technical-start-ups-policy.pdf"
+      ]
+    }
+  ]
+}

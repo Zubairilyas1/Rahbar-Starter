@@ -109,8 +109,11 @@ kubectl apply -f k8s/base/namespace.yaml
 # 2. Configure ServiceAccounts and RBAC
 kubectl apply -f k8s/base/serviceaccounts.yaml
 
-# 3. Create the configuration and secret
+# 3. Create the configuration (pipeline + release-gate thresholds), the secret and
+#    the RAGOps volumes (data lake, results, traces)
 kubectl apply -f k8s/base/configmap.yaml
+kubectl apply -f k8s/base/gate-configmap.yaml
+kubectl apply -f k8s/base/storage.yaml
 kubectl create secret generic rahbar-secret -n rahbar \
   --from-literal=LLM_API_KEY="placeholder-key-for-local"
 
@@ -122,12 +125,7 @@ kubectl apply -f k8s/base/redis-deployment.yaml
 kubectl apply -f k8s/base/services.yaml
 kubectl apply -f k8s/base/ingress.yaml
 
-# 6. Enforce Zero-Trust Network Policies
-# One manual substitution first: the Ollama-egress rule ships a placeholder
-# CIDR (every teammate's minikube host IP is different). Get yours with:
-#   minikube ssh "grep host.minikube.internal /etc/hosts"
-# then replace REPLACE_WITH_HOST_IP/32 in k8s/base/networkpolicy.yaml with
-# that IP (e.g. 192.168.49.1/32) before applying.
+# 6. Enforce Zero-Trust Network Policies (Ollama egress is port 11434 only)
 kubectl apply -f k8s/base/networkpolicy.yaml
 
 # 7. Wait for Chroma to be Ready
@@ -224,6 +222,40 @@ RAHBAR is gated using a 16-question labeled test suite ([`eval/golden.yaml`](eva
 | **Abstention Correctness** | $1.00$ | **1.00** | Gate passes |
 
 These figures come from the latest committed [`eval/results.json`](eval/results.json), not the stub evaluation used in GitHub CI.
+
+---
+
+## 6A. Assignment 03 (RAGOps): the exact command for each part
+
+Everything runs on the local Kubernetes cluster. A fresh cluster comes up with
+[`k8s/README.md`](k8s/README.md). The commands below work the same in bash and
+PowerShell. Files on the volumes are read and changed with `scripts/cluster_files.py`,
+which runs short-lived Jobs (no `kubectl exec`/`cp`; those are broken on Docker Desktop's Kubernetes).
+
+| Part | What | Command |
+|---|---|---|
+| **A1** | Ingest + verify (quality, completeness, recency, uniqueness). Failures go to `/datalake/quarantine`. Writes `/results/verification_report_<ts>.json` | `kubectl apply -f k8s/base/indexer-job.yaml` then `kubectl logs job/rahbar-indexer -n rahbar` |
+| **A1** | Batch B (11 docs with planted problems) | `kubectl apply -f k8s/jobs/ingest-batch-b-job.yaml` then `kubectl logs job/rahbar-ingest-batch-b -n rahbar` |
+| **A2** | Unchanged corpus re-run embeds **0** chunks | `kubectl create job --from=cronjob/reindex rerun-1 -n rahbar` then `kubectl logs job/rerun-1 -n rahbar` |
+| **A2** | Changed doc replaces only its own chunks | `python scripts/cluster_files.py sh "echo 'Updated: help desk ext. 100.' >> /datalake/corpus/doc02-library-digital-resources-2026.md"`, then a re-run Job |
+| **A2** | Deleted doc leaves no orphan chunks (count by document id) | `python scripts/cluster_files.py sh "rm /datalake/corpus/doc03-sports-complex-regulations-2026.md"`, then a re-run Job, then `kubectl apply -f k8s/jobs/chunk-counts-job.yaml` |
+| **A2** | Superseded version archived + excluded by metadata; rollback | archived by the Batch B run (doc11 supersedes the 2022 policy PDF); restore with `kubectl apply -f k8s/jobs/rollback-doc-job.yaml` |
+| **B** | Whole three-level suite, one command (timestamped result + summary table) | baseline: `kubectl apply -f k8s/jobs/eval-baseline-job.yaml`; local: `python eval/test_three_levels.py --api-url http://localhost:8000 --label baseline` |
+| **B** | Hand labels for judge agreement (8+) | `python eval/label_answers.py --result eval/results/cluster/latest_baseline.json --n 8 --labeller "<name>"` |
+| **C1** | Candidate = chunk 600/overlap 100 in its own collection | `kubectl apply -f k8s/release/index-candidate-c600-job.yaml` then `kubectl apply -f k8s/release/api-candidate-c600.yaml` |
+| **C2** | Release gate (thresholds in the `rahbar-gate` ConfigMap / `eval/gate_thresholds.yaml`) | `kubectl apply -f k8s/eval-job.yaml` (exit 1 means REJECT); local: `python eval/release_gate.py --baseline ... --candidate ...` |
+| **C3/F3** | Promote, then roll back a bad release | `kubectl patch deployment api -n rahbar --patch-file k8s/release/promote-c600-patch.yaml` then `kubectl rollout status deployment/api -n rahbar`; `kubectl rollout undo deployment/api -n rahbar` |
+| **D1** | Trace records (stdout + volume) | `kubectl logs deploy/api -n rahbar \| findstr record_type` (PowerShell) or `\| grep record_type` |
+| **D2** | Trace tool: exact context + prompt for a trace id | `python traces/inspect.py <trace_id> --path traces/cluster` |
+| **D3** | Metrics over a time window; live `/metrics` | `python traces/metrics_summary.py --path traces/cluster --last-minutes 60`; `kubectl port-forward svc/api 8000:8000 -n rahbar` then `curl localhost:8000/metrics` |
+| **D4** | Guardrail action in the trace (Batch B doc10 injection) | ask `"How do I reset my student portal password?"`, then `inspect.py` the trace and look under guardrail actions |
+| **D5** | Root cause from one trace | `python traces/diagnose.py <trace_id> --path traces/cluster` |
+| **E1/E2** | Coverage of 40 live queries; exits **1** below the required share | `python eval/check_coverage.py --golden eval/golden_baseline.jsonl` |
+| **E3** | Data drift: ingest Batch B, re-run the suite | `kubectl apply -f k8s/jobs/ingest-batch-b-job.yaml` then `kubectl apply -f k8s/jobs/eval-baseline-job.yaml` (compare with the pre-Batch-B result) |
+| **E4** | Close the gap with 6+ new golden questions | `python eval/check_coverage.py --golden eval/golden.jsonl` |
+| **F2** | ConfigMap threshold edit changes the gate without a rebuild | `kubectl apply -f k8s/jobs/eval-gate-only-job.yaml`, then `kubectl patch configmap rahbar-gate -n rahbar --patch-file k8s/jobs/gate-strict-patch.yaml`, delete the Job and apply it again |
+| **F4** | Copy results + traces off the volumes into the repo | `python scripts/cluster_files.py export` (to `eval/results/cluster/` and `traces/cluster/`) |
+| **F5** | Resource measurements | `kubectl top pods -n rahbar --containers` while the eval and indexer Jobs run |
 
 ---
 

@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-11-27T18:28:44Z",
+  "total_documents": 1,
+  "passed_documents": 1,
+  "quarantined_documents": 0,
+  "results": [
+    {
+      "source": "doc02-library-digital-resources-2026.md",
+      "passed": true,
+      "checks": [
+        {
+          "check_name": "quality",
+          "passed": true,
+          "reason": "Quality verified: non-empty, clean printable text"
+        },
+        {
+          "check_name": "completeness",
+          "passed": true,
+          "reason": "Completeness verified: all metadata present and text not truncated"
+        },
+        {
+          "check_name": "recency",
+          "passed": true,
+          "reason": "Recency verified: this is the newest known version of the document"
+        },
+        {
+          "check_name": "uniqueness",
+          "passed": true,
+          "reason": "Uniqueness verified: no exact or near-duplicate found"
+        }
+      ],
+      "quarantined": false,
+      "quarantine_path": null,
+      "hash_sha256": "567f8229e8c7a8d9f63a6f51d2e85ddaf033f82063511c3da0c738df2e14692e",
+      "doc_version": "2026-09",
+      "supersedes": []
+    }
+  ]
+}

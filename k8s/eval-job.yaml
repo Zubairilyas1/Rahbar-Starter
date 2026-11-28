@@ -1,0 +1,67 @@
+# Part B suite + release gate as a Kubernetes Job (Assignment 03 F2/F3).
+#
+#   kubectl delete job rahbar-eval -n rahbar --ignore-not-found
+#   kubectl apply -f k8s/eval-job.yaml
+#   kubectl wait --for=condition=complete --timeout=60m job/rahbar-eval -n rahbar   # gate passed
+#   kubectl logs job/rahbar-eval -n rahbar
+#
+# It evaluates the CANDIDATE Service (api-candidate, its own collection), writes a
+# timestamped result file to the rahbar-results volume and compares it with
+# /results/latest_baseline.json (recorded by k8s/jobs/eval-baseline-job.yaml).
+# If the gate fails, the container exits 1, backoffLimit is 0, so the Job ends in
+# Failed status and the candidate is never rolled out.
+# Thresholds come from the rahbar-gate ConfigMap (no image rebuild to change them).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rahbar-eval
+  namespace: rahbar
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 14400   # full suite x2 on CPU-only Ollama takes ~2 h
+  template:
+    metadata:
+      labels: {app: eval-job}
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: evaluator
+          image: rahbar-eval:dev
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: rahbar-config}
+            - configMapRef: {name: rahbar-gate}
+          env:
+            - {name: EVAL_LABEL, value: "candidate"}
+            - {name: EVAL_MODE, value: "full"}
+            - {name: EVAL_TARGET_URL, value: "http://api-candidate:8000"}
+            # One run is enough for a gate decision (the gate reads run 1); run-to-run
+            # stochasticity is measured once, on the Part B baseline (EVAL_REPEAT=2).
+            - {name: EVAL_REPEAT, value: "1"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: results, mountPath: /results}
+          # F5: the suite is an HTTP client; measured peak in docs/evidence/a3/kubectl-top-under-eval.txt.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - name: results
+          persistentVolumeClaim: {claimName: rahbar-results}

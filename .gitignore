@@ -38,3 +38,6 @@ venv/
 .coverage
 
 chroma_db/
+
+# Local dev traces (pytest / make dev); committed trace samples live in traces/cluster/
+traces/live_traces.jsonl

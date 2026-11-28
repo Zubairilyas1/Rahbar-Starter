@@ -1,0 +1,24 @@
+# Release-gate thresholds and evaluation settings (Assignment 03 C2/F2).
+# The eval Job reads these as environment variables; eval/release_gate.py gives
+# GATE_* precedence over eval/gate_thresholds.yaml baked into the image. So:
+#
+#   kubectl edit configmap rahbar-gate -n rahbar        # change e.g. GATE_MIN_FAITHFULNESS
+#   kubectl delete job rahbar-eval -n rahbar --ignore-not-found
+#   kubectl apply -f k8s/eval-job.yaml                  # with EVAL_MODE=gate-only
+#
+# changes the gate outcome without rebuilding any image.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rahbar-gate
+  namespace: rahbar
+data:
+  GATE_MAX_RECALL5_DROP: "0.02"
+  GATE_MIN_FAITHFULNESS: "0.80"
+  GATE_MIN_ABSTENTION_DELTA: "0.0"
+  GATE_MIN_CITATION_VALIDITY: "0.95"
+  GATE_MAX_LATENCY_P95_S: "90.0"
+  EVAL_SEED: "42"
+  EVAL_REPEAT: "2"
+  EVAL_TIMEOUT: "120"
+  JUDGE_MODEL: "grounding"

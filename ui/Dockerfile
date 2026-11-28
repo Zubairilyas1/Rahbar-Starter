@@ -5,7 +5,7 @@ FROM nginxinc/nginx-unprivileged:1.27-alpine
 
 # Patch OS packages with known fixed CVEs in the base image (Trivy gate in ci.yml).
 USER root
-RUN apk upgrade --no-cache
+RUN for i in 1 2 3 4 5; do apk upgrade --no-cache && break; sleep 5; done
 
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY index.html /usr/share/nginx/html/index.html

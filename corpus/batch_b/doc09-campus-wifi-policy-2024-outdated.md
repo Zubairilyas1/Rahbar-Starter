@@ -2,7 +2,7 @@
 title: Campus Wireless Network Usage Policy 2024
 doc_version: 2024-01
 source: doc09-campus-wifi-policy-2024-outdated.md
-superseded: true
+superseded: false
 ---
 
 # Campus Wireless Network Usage Policy 2024

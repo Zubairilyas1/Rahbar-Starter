@@ -1,0 +1,20 @@
+# A BAD release for the rollback demo (F3): ships the gate-rejected rahbar_c120
+# collection to the live Deployment, bypassing the gate. Then reverse it:
+#   kubectl patch deployment api -n rahbar --patch-file k8s/release/bad-release-c120-patch.yaml
+#   kubectl rollout status deployment/api -n rahbar
+#   ... ask a question, see poor answers / trace with collection rahbar_c120 ...
+#   kubectl rollout undo deployment/api -n rahbar
+#   kubectl rollout status deployment/api -n rahbar
+#   ... ask again: the new trace shows the previous collection and embedding version
+metadata:
+  annotations:
+    kubernetes.io/change-cause: "release: rahbar_c120 (chunk 120 / overlap 0) -- pushed WITHOUT the gate"
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          env:
+            - {name: PIPELINE_VERSION, value: "release-c120"}
+            - {name: CHROMA_COLLECTION, value: "rahbar_c120"}
+            - {name: COLLECTION_VERSION, value: "c120-o0"}

@@ -1,0 +1,6 @@
+# Stricter latency threshold, for the F2 demo "a ConfigMap edit changes the gate
+# outcome without rebuilding the image" (the c600 candidate measured p95 55.2 s):
+#   kubectl patch configmap rahbar-gate -n rahbar --patch-file k8s/jobs/gate-strict-patch.yaml
+# Undo with k8s/jobs/gate-default-patch.yaml.
+data:
+  GATE_MAX_LATENCY_P95_S: "50.0"

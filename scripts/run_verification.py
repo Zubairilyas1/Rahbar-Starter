@@ -1,75 +1,67 @@
-"""Run data verification stage on any corpus directory (Part A1, RAGOps paper 4.2.1-4.2.4).
-Usage:
-    python scripts/run_verification.py --corpus corpus/raw
+#!/usr/bin/env python3
+"""Run only the verification stage (Part A1) on a folder, without indexing anything.
+
     python scripts/run_verification.py --corpus corpus/batch_b
+    python scripts/run_verification.py --corpus corpus/batch_b --ollama-url http://127.0.0.1:11434
+
+The folder is copied to a temporary directory first, because quarantine MOVES
+failing files. The committed corpus is never modified. With --ollama-url the
+near-duplicate check uses embeddings, as in the indexer Job. Without it, it falls
+back to shingle Jaccard and says so in the reason column. The real pipeline run (on
+the cluster) is the indexer Job; this script is for checking a batch locally.
 """
 
+from __future__ import annotations
+
 import argparse
-import json
+import dataclasses
+import shutil
 import sys
+import tempfile
+import time
 from pathlib import Path
 
-# Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "indexer"))
 
-from indexer.pipeline.extract import extract
-from indexer.pipeline.run import discover, _front_matter
-from indexer.pipeline.verify import verify_and_quarantine
+from pipeline.config import get_settings  # noqa: E402
+from pipeline.extract import extract  # noqa: E402
+from pipeline.run import _front_matter, discover  # noqa: E402
+from pipeline.verify import format_report_table, verify_and_quarantine  # noqa: E402
 
 
-def run_verification(corpus_dir: str, quarantine_dir: str, report_path: str):
-    print(f"\n========================================================")
-    print(f"Running Data Verification on: {corpus_dir}")
-    print(f"Quarantine directory:         {quarantine_dir}")
-    print(f"Report output path:           {report_path}")
-    print(f"========================================================\n")
-    
-    raw_files = discover(corpus_dir)
-    if not raw_files:
-        print(f"Error: No files found in {corpus_dir}")
-        return 1
-    
-    extracted_docs = []
-    for path, doc_version, superseded in raw_files:
-        meta = _front_matter(path) if path.suffix.lower() == ".md" else {}
-        if "doc_version" not in meta:
-            meta["doc_version"] = doc_version
-        if "source" not in meta:
-            meta["source"] = path.name
-            
-        doc = extract(str(path), doc_version, superseded)
-        extracted_docs.append((doc, path, meta))
-        
-    passed_docs, report = verify_and_quarantine(
-        extracted_docs,
-        quarantine_dir=quarantine_dir,
-        report_path=report_path
-    )
-    
-    print("\n--- VERIFICATION SUMMARY REPORT ---")
-    print(f"Total Documents:     {report.total_documents}")
-    print(f"Passed Documents:    {report.passed_documents}")
-    print(f"Quarantined:         {report.quarantined_documents}")
-    print(f"Report File:         {report_path}\n")
-    
-    print(f"{'Source Document':<42} | {'Status':<10} | {'Checks (Q/C/R/U)':<16} | {'Reason / Notes'}")
-    print("-" * 110)
-    for res in report.results:
-        status_str = "PASS" if res.passed else "QUARANTINED"
-        checks_str = "".join("P" if c.passed else "F" for c in res.checks)
-        reasons = "; ".join(c.reason for c in res.checks if not c.passed)
-        if not reasons:
-            reasons = "All 4 checks passed"
-        print(f"{res.source:<42} | {status_str:<10} | {checks_str:<16} | {reasons}")
-    print("-" * 110 + "\n")
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Run the RAGOps verification stage on a folder")
+    ap.add_argument("--corpus", default="corpus/batch_b")
+    ap.add_argument("--report", default=None, help="default eval/results/verification_<folder>_<timestamp>.json")
+    ap.add_argument("--ollama-url", default=None, help="enable embedding near-duplicate detection")
+    ap.add_argument("--near-dup-threshold", type=float, default=0.95)
+    args = ap.parse_args()
+
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    report = Path(args.report or f"eval/results/verification_{Path(args.corpus).name}_{stamp}.json")
+    embed_fn = None
+    if args.ollama_url:
+        from pipeline.embed import embed
+
+        settings = dataclasses.replace(get_settings(), ollama_url=args.ollama_url)
+        embed_fn = lambda texts: embed(texts, settings)  # noqa: E731
+
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "corpus"
+        shutil.copytree(args.corpus, work)
+        docs = []
+        for path, version, superseded in discover(str(work)):
+            meta = _front_matter(path) if path.suffix.lower() == ".md" else {}
+            meta.setdefault("doc_version", version)
+            meta.setdefault("source", path.name)
+            docs.append((extract(str(path), version, superseded), path, meta))
+        _, rep = verify_and_quarantine(docs, quarantine_dir=Path(tmp) / "quarantine", report_path=report,
+                                       embed_fn=embed_fn, near_dup_threshold=args.near_dup_threshold)
+    print(format_report_table(rep))
+    print(f"\nreport: {report}")
     return 0
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run RAGOps document verification")
-    parser.add_argument("--corpus", default="corpus/batch_b", help="Corpus directory to verify")
-    parser.add_argument("--quarantine", default="corpus/quarantine", help="Quarantine directory")
-    parser.add_argument("--report", default="eval/results/verification_report_batch_b.json", help="Report output file")
-    args = parser.parse_args()
-    
-    sys.exit(run_verification(args.corpus, args.quarantine, args.report))
+    sys.exit(main())

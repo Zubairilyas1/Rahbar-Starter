@@ -1,155 +1,116 @@
-"""Root-Cause Diagnosis Engine.
-Assignment 03 Part D5 (RAGOps paper 3.2.3, 5.1, Table 2).
+#!/usr/bin/env python3
+"""Root cause from the trace only (Assignment 03 D5, RAGOps paper 3.2.3, 5.1).
 
-Given a trace ID, automatically diagnoses the root cause of degraded, abstained,
-or unexpected responses into one of five canonical failure modes:
-1. Retrieval Failure (Knowledge Gap / Low Relevance)
-2. Wrong Chunk / Version Conflict (Superseded or Irrelevant passage retrieved)
-3. Context Truncation (Context length exceeded model limit)
-4. Generation Hallucination (LLM hallucinated citations or facts not in retrieved context)
-5. Adversarial Injection Attempt (Prompt injection detected and blocked)
+Reads ONE trace record and points at the stage, chunk, document version or filter
+that explains a wrong or abstained answer. It uses nothing but the trace.
+
+    python traces/diagnose.py <trace_id> [--path traces/cluster]
+
+Rules, in order:
+  injection        a guardrail flagged an instruction in the query or a chunk
+  below floor      top-1 similarity under the relevance floor -> retrieval gap
+  filter/version   the filter excluded superseded chunks, or retrieved chunks mix
+                   document versions of the same document
+  generation       chunks above the floor but the model abstained / cited nothing
+                   valid -> generation or citation-verification stage
+  near-floor       answered, but top-1 within 0.05 of the floor -> fragile retrieval
 """
+
+from __future__ import annotations
 
 import argparse
 import json
 import sys
+from collections import defaultdict
 from pathlib import Path
 
-DEFAULT_TRACE_FILE = Path("traces/live_traces.jsonl")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+# PDF text contains ligatures/symbols; never crash on a cp1252 console or pipe.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+from trace_io import DEFAULT_TRACE_PATH, find_trace, load_traces  # noqa: E402
 
 
-def diagnose_trace(trace_id: str, trace_file: Path = DEFAULT_TRACE_FILE) -> int:
-    if not trace_file.exists():
-        print(f"Error: Trace file not found at {trace_file}")
+def diagnose(rec: dict) -> list[tuple[str, str]]:  # type: ignore[type-arg]
+    chunks = rec.get("retrieved_chunks", [])
+    resp = rec.get("response", {})
+    params = rec.get("parameters", {})
+    floor = float(params.get("relevance_floor", 0.5))
+    top1 = float(chunks[0]["score"]) if chunks else 0.0
+    answered = bool(resp.get("answered_from_context"))
+    findings: list[tuple[str, str]] = []
+
+    for g in rec.get("guardrail_actions", []):
+        if g.get("rail") == "prompt_injection_guardrail" and g.get("triggered"):
+            where = f"chunk {g.get('chunk_id')} of {g.get('document_id')}" if g.get("chunk_id") else "the user query"
+            findings.append(("guardrail", f"injection-like instruction in {where}: action={g.get('action')}"))
+
+    if not chunks:
+        findings.append(("retrieval", "nothing retrieved: the collection returned no chunk for this filter"))
+    elif top1 < floor:
+        findings.append(("retrieval", f"top-1 similarity {top1:.4f} < relevance floor {floor:.2f} -> abstained "
+                                      f"before generation; best chunk {chunks[0]['chunk_id']} "
+                                      f"({chunks[0].get('document_id')} p.{chunks[0].get('page')}) is off-topic: "
+                                      "corpus/golden gap"))
+
+    flt = rec.get("filters_applied") or {}
+    if flt.get("superseded") is False:
+        findings.append(("filter", "filter superseded=False was applied: archived versions were excluded"))
+    versions = defaultdict(set)
+    for c in chunks:
+        versions[c.get("document_id")].add(c.get("doc_version"))
+    for doc, vs in versions.items():
+        if len(vs) > 1:
+            findings.append(("version", f"{doc} retrieved in several versions {sorted(map(str, vs))}"))
+
+    if chunks and top1 >= floor and not answered:
+        cited = rec.get("citations", [])
+        findings.append(("generation", f"retrieval passed the floor (top-1 {top1:.4f}, chunk {chunks[0]['chunk_id']} "
+                                       f"from {chunks[0].get('document_id')} v{chunks[0].get('doc_version')} "
+                                       f"p.{chunks[0].get('page')}) but the model abstained"
+                                       + (" / its citations failed verification" if not cited else "")))
+    if answered and chunks and top1 < floor + 0.05:
+        findings.append(("retrieval", f"answered with top-1 {top1:.4f}, within 0.05 of the floor: fragile"))
+    if not findings:
+        findings.append(("ok", "no anomaly visible in the trace"))
+    return findings
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Root-cause a trace using only the trace record")
+    ap.add_argument("trace_id", nargs="?", help="trace id (default: newest trace)")
+    ap.add_argument("--path", "--file", dest="path", default=str(DEFAULT_TRACE_PATH))
+    ap.add_argument("--since", help="only traces at/after this UTC time (when an id repeats across runs)")
+    ap.add_argument("--until", help="only traces at/before this UTC time")
+    args = ap.parse_args()
+
+    if args.trace_id:
+        rec = find_trace(Path(args.path), args.trace_id, args.since, args.until)
+    else:
+        all_recs = load_traces(Path(args.path))
+        rec = all_recs[-1] if all_recs else None
+    if rec is None:
+        print(f"trace not found under {args.path}")
         return 1
 
-    record = None
-    with open(trace_file, "r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            try:
-                data = json.loads(line)
-                if data.get("trace_id") == trace_id or trace_id in data.get("trace_id", ""):
-                    record = data
-                    break
-            except Exception:
-                continue
-
-    if not record:
-        print(f"Trace ID '{trace_id}' not found.")
-        return 1
-
-    print("\n" + "=" * 80)
-    print(f"RAHBAR RAGOps: Root-Cause Diagnosis Report [{record.get('trace_id')}]")
-    print("=" * 80)
-    print(f"Query:         {record.get('user_query')}")
-    print(f"Timestamp:     {record.get('timestamp')}")
-    print(f"Provider:      {record.get('model')}")
-    print(f"Cache Status:  {record.get('cache_status', 'miss').upper()}")
-
-    retrieved = record.get("retrieved_chunks", [])
-    response = record.get("response", {})
-    rails = record.get("guardrail_actions", [])
-    prompt = record.get("full_prompt", "")
-    citations = record.get("citations", [])
-
-    diagnosis = []
-    recommendation = []
-
-    # Check 1: Adversarial Prompt Injection
-    injections = [r for r in rails if r.get("rail") == "prompt_injection_guardrail" and r.get("triggered")]
-    if injections:
-        diagnosis.append({
-            "stage": "Security / Guardrail Stage",
-            "root_cause": "ADVERSARIAL_PROMPT_INJECTION",
-            "confidence": 1.0,
-            "evidence": f"Instruction override pattern detected: '{injections[0].get('reason')}'",
-        })
-        recommendation.append("Maintain strict system prompt delimiters and honeypot canary tokens.")
-
-    # Check 2: Low Retrieval Similarity / Knowledge Gap
-    max_score = max([c.get("score", 0.0) for c in retrieved]) if retrieved else 0.0
-    if not response.get("answered_from_context") and max_score < 0.35:
-        diagnosis.append({
-            "stage": "Retrieval Stage",
-            "root_cause": "RETRIEVAL_FAILURE_KNOWLEDGE_GAP",
-            "confidence": 0.95,
-            "evidence": f"Top-1 retrieval score ({max_score:.4f}) is below relevance floor (0.3500). System abstained honestly.",
-        })
-        recommendation.append("Expand the corpus with domain documents covering this topic or evaluate query expansion.")
-
-    # Check 3: Superseded / Version Conflict
-    superseded_chunks = [c for c in retrieved if "2023" in c.get("document_id", "") or "2024" in c.get("document_id", "")]
-    if superseded_chunks and any("2026" in c.get("document_id", "") for c in retrieved):
-        diagnosis.append({
-            "stage": "Indexing / Metadata Filter Stage",
-            "root_cause": "VERSION_CONFLICT_SUPERSEDED_DOCUMENT",
-            "confidence": 0.85,
-            "evidence": f"Retrieved mix of active and superseded documents: {[c.get('document_id') for c in retrieved]}",
-        })
-        recommendation.append("Enforce strict metadata filter {'superseded': {'$ne': True}} during Chroma query.")
-
-    # Check 4: Context Truncation
-    if len(prompt) > 8000:
-        diagnosis.append({
-            "stage": "Augmented Prompt Stage",
-            "root_cause": "CONTEXT_TRUNCATION",
-            "confidence": 0.90,
-            "evidence": f"Prompt length ({len(prompt)} chars) exceeds model attention window. Tail passages may be lost.",
-        })
-        recommendation.append("Reduce top_k or tune chunk size to prevent context overflow.")
-
-    # Check 5: Hallucination / Ungrounded Citations
-    if response.get("answered_from_context") and not citations and len(retrieved) > 0:
-        diagnosis.append({
-            "stage": "Generation / Verification Stage",
-            "root_cause": "GENERATION_UNGROUNDED_SYNTHESIS",
-            "confidence": 0.80,
-            "evidence": "Model generated answer but citations could not be verified against retrieved passages and were dropped.",
-        })
-        recommendation.append("Increase temperature constraint (T<=0.2) or apply strict Pydantic citation grounding.")
-
-    if not diagnosis:
-        diagnosis.append({
-            "stage": "End-to-End Pipeline",
-            "root_cause": "NOMINAL_EXECUTION",
-            "confidence": 1.0,
-            "evidence": "Query answered successfully with verified citations and high confidence.",
-        })
-        recommendation.append("No remediation required.")
-
-    print("\n--- Diagnostic Findings ---")
-    for d in diagnosis:
-        print(f"Stage:          {d['stage']}")
-        print(f"Root Cause:     {d['root_cause']} (Confidence: {d['confidence']*100:.0f}%)")
-        print(f"Evidence:       {d['evidence']}")
-        print()
-
-    print("--- Remediation Recommendations ---")
-    for r in recommendation:
-        print(f"  * {r}")
-    print("=" * 80 + "\n")
+    resp = rec.get("response", {})
+    print("=" * 96)
+    print(f"ROOT CAUSE FROM TRACE {rec['trace_id']}  ({rec.get('timestamp')})")
+    print("=" * 96)
+    print(f"query      : {rec.get('user_query')}")
+    print(f"collection : {rec.get('collection_name')} v{rec.get('collection_version')}  "
+          f"embed {rec.get('embedding_model')} {rec.get('embedding_version')}")
+    print(f"filters    : {json.dumps(rec.get('filters_applied'))}   params: {json.dumps(rec.get('parameters'))}")
+    print(f"answer     : answered_from_context={resp.get('answered_from_context')}  {resp.get('answer', '')[:150]}")
+    print("chunks     :")
+    for i, c in enumerate(rec.get("retrieved_chunks", []), 1):
+        print(f"  [{i}] {c.get('score'):.4f}  {c.get('chunk_id')}  {c.get('document_id')} "
+              f"v{c.get('doc_version')} p.{c.get('page')}")
+    print("-" * 96)
+    for stage, text in diagnose(rec):
+        print(f"[{stage}] {text}")
+    print("=" * 96)
     return 0
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Diagnose root causes of query failures from traces")
-    parser.add_argument("trace_id", nargs="?", help="Trace ID to diagnose")
-    args = parser.parse_args()
-
-    trace_id = args.trace_id
-    if not trace_id:
-        if DEFAULT_TRACE_FILE.exists():
-            with open(DEFAULT_TRACE_FILE, "r", encoding="utf-8") as f:
-                lines = [l.strip() for l in f if l.strip()]
-                if lines:
-                    trace_id = json.loads(lines[-1]).get("trace_id")
-    if not trace_id:
-        print("Please provide a trace ID or ensure traces/live_traces.jsonl exists.")
-        return 1
-
-    return diagnose_trace(trace_id)
 
 
 if __name__ == "__main__":

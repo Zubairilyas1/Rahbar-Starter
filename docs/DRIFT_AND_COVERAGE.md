@@ -1,52 +1,41 @@
-# RAHBAR RAGOps: Evaluation Dataset Coverage & Drift Analysis (Part E)
+# Drift and coverage checking (Assignment 03 Part E)
 
-## 1. Overview and Problem Formulation
-In real-world RAG systems, user query distributions continuously evolve as new semesters begin, new campus facilities open, and institutional policies update (Xu et al., 2026, Section 3.2.3 & 5.1). A static evaluation suite suffers from **Evaluation Drift**: the test set no longer represents the real-world traffic distribution, leading to false confidence in system quality.
+**E1, live query log.** `eval/live_queries.jsonl` has 40 user-style queries: 28 in the
+golden set's domain (grading, attendance, fees, academic rules, entrepreneurship
+policy) and 12 on topics the corpus and tests do not cover. Each query has a
+`topic` label used for grouping.
 
-To solve this, RAHBAR provides an automated **Coverage & Drift Checking Engine** (`eval/check_coverage.py`) that monitors production query logs against the canonical golden dataset.
+**E2, coverage.** `eval/check_coverage.py` embeds every live query and golden question
+with the pinned model (`nomic-embed-text`). For each live query it finds the most
+similar golden question. A query counts as covered when that cosine is at least
+the threshold τ (default 0.75, `--threshold`).
 
----
+τ is set from the module-level test (Part B). Paraphrase pairs score clearly higher
+than unrelated pairs. τ is placed below the mean paraphrase similarity and well above
+the highest unrelated-pair similarity, so "covered" means "a paraphrase of something
+we test". The report quotes the measured means. The script prints the share of
+covered queries and lists the uncovered ones grouped by topic. It exits **1** when the
+share is below `--min-coverage` (default 0.85, the paper's 4.2.7 example) and 2 when
+it cannot embed.
 
-## 2. Methodology & Similarity Threshold
-For each query $q_{live} \in \mathcal{Q}_{live}$, the engine computes its dense vector representation using `nomic-embed-text` and evaluates the maximum cosine similarity across all golden questions $q_{golden} \in \mathcal{Q}_{golden}$:
+**E3, data drift.** Ingest Batch B (`k8s/jobs/ingest-batch-b-job.yaml`), then re-run the
+baseline evaluation (`k8s/jobs/eval-baseline-job.yaml`) and compare it with the
+pre-Batch-B result file. The expected, explainable change: doc11 supersedes the 2022
+entrepreneurship policy, so golden question g08's ground-truth document is archived
+and excluded by the `superseded=False` filter. Retrieval for g08 now returns doc11,
+and its recall and answer change.
 
-$$\text{Coverage}(q_{live}) = \max_{g \in \mathcal{Q}_{golden}} \cos(\mathbf{e}(q_{live}), \mathbf{e}(g)) \ge \tau$$
+**E4, close the gap.** Golden questions added from the uncovered topics are in
+`eval/golden.jsonl`. The 26-question set is kept as `eval/golden_baseline.jsonl` for the
+"before" run:
 
-Where $\tau = 0.70$ is the empirical semantic coverage threshold. Queries with $\text{Coverage}(q_{live}) < \tau$ represent **Coverage Gaps** (untested user intents and topics).
+```
+python eval/check_coverage.py --golden eval/golden_baseline.jsonl    # before
+python eval/check_coverage.py --golden eval/golden.jsonl             # after
+```
 
----
+Questions about topics the corpus does not contain are written as `must_abstain`
+cases. Covering such a topic in the tests means checking that RAHBAR abstains on it,
+not inventing an answer.
 
-## 3. Empirical Results: Before vs After Golden Expansion
-
-We evaluated 40 live production queries (`eval/live_queries.jsonl`) against the initial 26-question golden dataset, identified critical topic gaps, and expanded the dataset with 6 targeted test cases (`g27` to `g32`).
-
-### Comparative Metrics
-
-| Metric | Initial Golden Dataset (26 Qs) | Expanded Golden Dataset (32 Qs) | Impact / Recovery |
-| :--- | :--- | :--- | :--- |
-| **Total Live Queries Evaluated** | 40 | 40 | - |
-| **Golden Question Count** | 26 | 32 | +6 questions (+23.1%) |
-| **Similarity Threshold ($\tau$)** | 0.70 | 0.70 | Calibrated semantic threshold |
-| **Covered Queries** | 18 / 40 | **24 / 40** | **+6 queries (+33.3% relative)** |
-| **Coverage Gaps** | 22 | **16** | **-6 gaps eliminated** |
-| **Overall Coverage Rate** | 45.0% | **60.0%** | **+15.0% absolute increase** |
-
-### Per-Topic Coverage Resolution
-
-| Topic | Initial Coverage % | Expanded Coverage % | Remediation Question Added |
-| :--- | :--- | :--- | :--- |
-| `fee_refund` | 0.0% | **100.0%** | `g27` (Fee refund schedule on class withdrawal) |
-| `course_drop` | 0.0% | **100.0%** | `g28` (Course drop deadline with W grade) |
-| `grading_appeal` | 0.0% | **100.0%** | `g29` (7-day grade appeal procedure) |
-| `semester_freeze` | 0.0% | **100.0%** | `g30` (Semester freeze rules & 2-semester limit) |
-| `sports_complex` | 33.3% | **66.7%** | `g31` (Sports complex gym hours and access) |
-| `parking_regulations` | 0.0% | **100.0%** | `g32` (Student vehicle parking sticker procedure) |
-| `hostel_curfew` | 0.0% | 0.0% | Flagged as true out-of-domain knowledge gap |
-| `admissions` | 0.0% | 0.0% | Flagged for future admissions cycle expansion |
-
----
-
-## 4. Key Takeaways & Operational Feedback Loop
-1. **Closing the Loop**: The coverage checker transforms evaluation from a one-off pre-deployment benchmark into an active feedback loop where live queries directly inform test suite evolution.
-2. **Distinguishing Drift from Out-of-Domain**: Queries regarding hostel curfews or cafeteria subsidies are confirmed out-of-scope and verified against honest abstention criteria (Part D4).
-3. **Traceability**: All coverage evaluations are stored in `eval/results/coverage_report_expanded.json` for auditability and compliance reporting.
+The reports are written to `eval/results/coverage_<golden>_<timestamp>.json`.

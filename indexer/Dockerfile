@@ -15,9 +15,9 @@ FROM python:3.12-slim
 # System packages for OCR (pytesseract + pdf2image need the actual binaries, not just
 # the Python wheels): pytesseract shells out to `tesseract`; pdf2image shells out to
 # poppler's `pdftoppm`.
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends tesseract-ocr poppler-utils \
+RUN apt-get -o Acquire::Retries=8 update \
+    && apt-get -o Acquire::Retries=8 upgrade -y \
+    && apt-get -o Acquire::Retries=8 install -y --no-install-recommends tesseract-ocr poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r rahbar --gid=1000 \
@@ -26,7 +26,7 @@ RUN groupadd -r rahbar --gid=1000 \
 WORKDIR /app
 
 COPY indexer/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements.txt
 
 COPY indexer/pipeline/ /app/pipeline/
 
@@ -39,7 +39,12 @@ COPY corpus/raw/ /corpus/
 # university site from CI.
 COPY eval/fixtures/ /app/fixtures/
 
-RUN mkdir -p /tmp && chown -R rahbar:rahbar /app /corpus /tmp
+# Assignment 03 Batch B (planted problems), copied into the data lake's incoming/
+# folder by k8s/jobs/ingest-batch-b-job.yaml. The image's /corpus seeds an empty
+# data lake (SEED_CORPUS_DIR); every later write goes to the rahbar-datalake PVC.
+COPY corpus/batch_b/ /batches/batch_b/
+
+RUN mkdir -p /tmp /datalake /results && chown -R rahbar:rahbar /app /corpus /batches /tmp /datalake /results
 USER rahbar
 
 ENTRYPOINT ["python", "-m", "pipeline.run"]

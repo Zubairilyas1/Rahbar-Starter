@@ -2,10 +2,13 @@
 # Requires minikube started with --cni=calico; the default CNI accepts these
 # manifests and silently ignores them (STARTER.md).
 #
-# MANUAL STEP before applying: policy #7 below (egress to Ollama on the host) needs
-# this machine's actual minikube host IP. Get it with:
-#   minikube ssh "grep host.minikube.internal /etc/hosts"
-# and replace REPLACE_WITH_HOST_IP/32 below -- it is different on every machine.
+# Policy #7 (egress to Ollama on the host) allows TCP 11434 to any address, because
+# host.minikube.internal resolves to a different IP on every machine; it is still
+# limited to one port and to the pods that need a model.
+#
+# Assignment 03 additions: the candidate API (app=api-candidate) gets exactly the
+# api's paths, and the eval Job (app=eval-job) may call both APIs and Ollama (judge).
+# Pods started by scripts/cluster_files.py (app=ragops-files) get no allow rule: they only mount volumes.
 
 # 1. Deny all ingress and egress by default for every pod in the namespace.
 apiVersion: networking.k8s.io/v1
@@ -56,6 +59,21 @@ spec:
     - from:
         - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
         - podSelector: {matchLabels: {app: ui}}
+        - podSelector: {matchLabels: {app: eval-job}}
+      ports: [{protocol: TCP, port: 8000}]
+---
+# 4b. The candidate API takes traffic only from the eval Job (never from users).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-eval-to-api-candidate
+  namespace: rahbar
+spec:
+  podSelector: {matchLabels: {app: api-candidate}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: eval-job}}
       ports: [{protocol: TCP, port: 8000}]
 ---
 # 5. chroma from api and indexer only. ui must NOT be able to reach chroma.
@@ -70,6 +88,7 @@ spec:
   ingress:
     - from:
         - podSelector: {matchLabels: {app: api}}
+        - podSelector: {matchLabels: {app: api-candidate}}
         - podSelector: {matchLabels: {app: rahbar-indexer}}
       ports: [{protocol: TCP, port: 8000}]
 ---
@@ -85,6 +104,7 @@ spec:
   ingress:
     - from:
         - podSelector: {matchLabels: {app: api}}
+        - podSelector: {matchLabels: {app: api-candidate}}
         - podSelector: {matchLabels: {app: rahbar-indexer}}
       ports: [{protocol: TCP, port: 6379}]
 ---
@@ -99,10 +119,10 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-      - {key: app, operator: In, values: [api, rahbar-indexer]}
+      - {key: app, operator: In, values: [api, api-candidate, rahbar-indexer, eval-job]}
   policyTypes: [Egress]
   egress:
-    - to: [{ipBlock: {cidr: REPLACE_WITH_HOST_IP/32}}]
+    - to: [{ipBlock: {cidr: 0.0.0.0/0}}]
       ports: [{protocol: TCP, port: 11434}]
 ---
 # 8. api -> chroma and redis egress (the policies above only grant ingress on the
@@ -114,7 +134,9 @@ metadata:
   name: allow-api-egress-to-chroma-and-redis
   namespace: rahbar
 spec:
-  podSelector: {matchLabels: {app: api}}
+  podSelector:
+    matchExpressions:
+      - {key: app, operator: In, values: [api, api-candidate]}
   policyTypes: [Egress]
   egress:
     - to: [{podSelector: {matchLabels: {app: chroma}}}]
@@ -136,3 +158,18 @@ spec:
       ports: [{protocol: TCP, port: 8000}]
     - to: [{podSelector: {matchLabels: {app: redis}}}]
       ports: [{protocol: TCP, port: 6379}]
+---
+# 10. eval Job -> the live and candidate APIs (Part B suite / release gate).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-eval-egress-to-apis
+  namespace: rahbar
+spec:
+  podSelector: {matchLabels: {app: eval-job}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app: api}}
+        - podSelector: {matchLabels: {app: api-candidate}}
+      ports: [{protocol: TCP, port: 8000}]
